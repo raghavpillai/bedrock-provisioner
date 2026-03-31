@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { client } from "@/lib/orpc";
 import { useRegion } from "@/lib/region-context";
-import type { BedrockModel } from "@bedrock-provisioner/shared";
+import type { BedrockModel } from "@rockbed/shared";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

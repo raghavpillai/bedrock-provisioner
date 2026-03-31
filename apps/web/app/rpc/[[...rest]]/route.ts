@@ -1,6 +1,6 @@
 import { RPCHandler } from "@orpc/server/fetch";
 import { onError } from "@orpc/server";
-import { router } from "@bedrock-provisioner/api";
+import { router } from "@rockbed/api";
 
 const handler = new RPCHandler(router, {
   interceptors: [onError((error) => console.error("[rpc]", error))],

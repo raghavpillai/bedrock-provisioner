@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@bedrock-provisioner/api", "@bedrock-provisioner/shared", "@bedrock-provisioner/db"],
-  serverExternalPackages: ["@prisma/client"],
+  transpilePackages: ["@rockbed/api", "@rockbed/shared", "@rockbed/db"],
 };
 
 export default nextConfig;

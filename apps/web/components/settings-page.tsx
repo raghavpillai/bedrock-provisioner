@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { client } from "@/lib/orpc";
 import { useRegion } from "@/lib/region-context";
-import type { Identity } from "@bedrock-provisioner/shared";
+import type { Identity } from "@rockbed/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {

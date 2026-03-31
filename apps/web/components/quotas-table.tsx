@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { client } from "@/lib/orpc";
 import { useRegion } from "@/lib/region-context";
-import type { BedrockQuota } from "@bedrock-provisioner/shared";
+import type { BedrockQuota } from "@rockbed/shared";
 import { Input } from "@/components/ui/input";
 import {
   Select,

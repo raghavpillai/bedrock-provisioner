@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRegion } from "@/lib/region-context";
 import { useSession, signOut } from "@/lib/auth-client";
-import { REGIONS } from "@bedrock-provisioner/shared";
 import {
   Sidebar,
   SidebarContent,
@@ -51,7 +50,7 @@ const navItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { region, setRegion } = useRegion();
+  const { region, setRegion, enabledRegions } = useRegion();
   const { data: session, isPending } = useSession();
 
   return (
@@ -59,10 +58,10 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold">
-            B
+            R
           </div>
           <span className="font-semibold text-sm tracking-tight">
-            Bedrock Provisioner
+            Rockbed
           </span>
         </Link>
       </SidebarHeader>
@@ -108,7 +107,7 @@ export function AppSidebar() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {REGIONS.map((r) => (
+              {enabledRegions.map((r) => (
                 <SelectItem key={r} value={r}>
                   {r}
                 </SelectItem>

@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { prisma } from "@bedrock-provisioner/db";
+import { prisma } from "@rockbed/db";
 import { headers } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 

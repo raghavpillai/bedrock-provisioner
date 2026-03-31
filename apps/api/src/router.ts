@@ -29,8 +29,8 @@ import {
   BEDROCK_POLICY_ARN,
   BEDROCK_SERVICE_NAME,
   USER_PREFIX,
-} from "@bedrock-provisioner/shared";
-import { prisma } from "@bedrock-provisioner/db";
+} from "@rockbed/shared";
+import { prisma } from "@rockbed/db";
 
 function createClients(region: string) {
   const config = { region };
@@ -118,9 +118,9 @@ const createKey = os.input(CreateKeyInput).handler(async ({ input }) => {
     new TagUserCommand({
       UserName: userName,
       Tags: [
-        { Key: "bedrock-provisioner:expiryDays", Value: String(input.expiryDays) },
-        { Key: "bedrock-provisioner:expiresAt", Value: expiresAt ?? "never" },
-        { Key: "bedrock-provisioner:createdBy", Value: input.createdBy ?? "unknown" },
+        { Key: "rockbed:expiryDays", Value: String(input.expiryDays) },
+        { Key: "rockbed:expiresAt", Value: expiresAt ?? "never" },
+        { Key: "rockbed:createdBy", Value: input.createdBy ?? "unknown" },
       ],
     })
   );
@@ -172,14 +172,14 @@ const listKeys = os.input(RegionInput).handler(async ({ input }) => {
 
     const tags = tagsRes.Tags ?? [];
     const expiresAtTag = tags.find(
-      (t) => t.Key === "bedrock-provisioner:expiresAt"
+      (t) => t.Key === "rockbed:expiresAt"
     );
     const expiresAt =
       expiresAtTag?.Value && expiresAtTag.Value !== "never"
         ? expiresAtTag.Value
         : null;
     const createdByTag = tags.find(
-      (t) => t.Key === "bedrock-provisioner:createdBy"
+      (t) => t.Key === "rockbed:createdBy"
     );
     const createdBy =
       createdByTag?.Value && createdByTag.Value !== "unknown"
@@ -308,8 +308,16 @@ const toggleFavorite = os
 // -- Settings --
 
 const getSettings = os.handler(async () => {
-  const region = await prisma.setting.findUnique({ where: { key: "default_region" } });
-  return { defaultRegion: region?.value ?? "us-east-1" };
+  const [defaultRegion, enabledRegions] = await Promise.all([
+    prisma.setting.findUnique({ where: { key: "default_region" } }),
+    prisma.setting.findUnique({ where: { key: "enabled_regions" } }),
+  ]);
+  return {
+    defaultRegion: defaultRegion?.value ?? "us-east-1",
+    enabledRegions: enabledRegions?.value
+      ? enabledRegions.value.split(",").filter(Boolean)
+      : ["us-east-1", "us-west-2"],
+  };
 });
 
 const setDefaultRegion = os
@@ -319,6 +327,17 @@ const setDefaultRegion = os
       where: { key: "default_region" },
       update: { value: input.region },
       create: { key: "default_region", value: input.region },
+    });
+    return { ok: true };
+  });
+
+const setEnabledRegions = os
+  .input(z.object({ regions: z.array(z.string()) }))
+  .handler(async ({ input }) => {
+    await prisma.setting.upsert({
+      where: { key: "enabled_regions" },
+      update: { value: input.regions.join(",") },
+      create: { key: "enabled_regions", value: input.regions.join(",") },
     });
     return { ok: true };
   });
@@ -347,6 +366,7 @@ export const router = {
   settings: {
     get: getSettings,
     setRegion: setDefaultRegion,
+    setEnabledRegions,
   },
 };
 

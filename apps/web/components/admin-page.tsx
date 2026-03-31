@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "@/lib/auth-client";
+import { client } from "@/lib/orpc";
+import { ALL_BEDROCK_REGIONS } from "@rockbed/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -86,33 +88,32 @@ function AdminGate() {
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-10 h-10 rounded-xl bg-muted flex items-center justify-center mb-3">
+      <div className="bg-card border border-border rounded-2xl p-8 w-full max-w-sm space-y-6">
+        <div className="text-center space-y-2">
+          <div className="mx-auto w-11 h-11 rounded-xl bg-muted flex items-center justify-center">
             <LockIcon className="size-5 text-muted-foreground" />
           </div>
-          <CardTitle className="text-lg">Admin Access</CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h2 className="text-lg font-semibold">Admin Access</h2>
+          <p className="text-sm text-muted-foreground">
             Enter the admin password to access this page.
           </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <Input
-              type="password"
-              placeholder="Admin password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoFocus
-            />
-            {error && <p className="text-xs text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Verifying..." : "Unlock"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <Input
+            type="password"
+            placeholder="Admin password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoFocus
+            className="h-11 rounded-xl"
+          />
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <Button type="submit" className="w-full h-11 rounded-xl" disabled={loading}>
+            {loading ? "Verifying..." : "Unlock"}
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -125,15 +126,23 @@ function AdminDashboard() {
   const [saving, setSaving] = useState(false);
   const [roleDialog, setRoleDialog] = useState<User | null>(null);
   const [selectedRole, setSelectedRole] = useState("user");
+  const [enabledRegions, setEnabledRegions] = useState<Set<string>>(new Set(["us-east-1", "us-west-2"]));
+  const [defaultRegion, setDefaultRegion] = useState("us-east-1");
+  const [savingRegions, setSavingRegions] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin");
-      const data = await res.json();
+      const [adminRes, settingsRes] = await Promise.all([
+        fetch("/api/admin"),
+        client.settings.get(),
+      ]);
+      const data = await adminRes.json();
       setUsers(data.users ?? []);
       setAllowedDomains(data.allowedDomains ?? "");
       setDomainsInput(data.allowedDomains ?? "");
+      setEnabledRegions(new Set(settingsRes.enabledRegions));
+      setDefaultRegion(settingsRes.defaultRegion);
     } catch {}
     setLoading(false);
   }, []);
@@ -142,7 +151,21 @@ function AdminDashboard() {
     refresh();
   }, [refresh]);
 
+  const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)+$/;
+
+  function validateDomains(input: string): string | null {
+    if (!input.trim()) return null;
+    const domains = input.split(",").map((d) => d.trim()).filter(Boolean);
+    for (const d of domains) {
+      if (!domainRegex.test(d)) return `"${d}" is not a valid domain`;
+    }
+    return null;
+  }
+
+  const domainError = validateDomains(domainsInput);
+
   async function saveDomains() {
+    if (domainError) return;
     setSaving(true);
     await fetch("/api/admin", {
       method: "POST",
@@ -151,6 +174,35 @@ function AdminDashboard() {
     });
     setAllowedDomains(domainsInput);
     setSaving(false);
+  }
+
+  async function toggleRegion(region: string) {
+    const next = new Set(enabledRegions);
+    if (next.has(region)) {
+      next.delete(region);
+      if (defaultRegion === region) {
+        const first = [...next][0] ?? "us-east-1";
+        setDefaultRegion(first);
+        await client.settings.setRegion({ region: first });
+      }
+    } else {
+      next.add(region);
+    }
+    setEnabledRegions(next);
+    setSavingRegions(true);
+    await client.settings.setEnabledRegions({ regions: [...next] });
+    setSavingRegions(false);
+  }
+
+  async function changeDefaultRegion(region: string) {
+    setDefaultRegion(region);
+    if (!enabledRegions.has(region)) {
+      const next = new Set(enabledRegions);
+      next.add(region);
+      setEnabledRegions(next);
+      await client.settings.setEnabledRegions({ regions: [...next] });
+    }
+    await client.settings.setRegion({ region });
   }
 
   async function setRole(userId: string, role: string) {
@@ -199,11 +251,14 @@ function AdminDashboard() {
             />
             <Button
               onClick={saveDomains}
-              disabled={saving || domainsInput === allowedDomains}
+              disabled={saving || domainsInput === allowedDomains || !!domainError}
             >
               {saving ? "Saving..." : "Save"}
             </Button>
           </div>
+          {domainError && domainsInput !== allowedDomains && (
+            <p className="text-xs text-destructive mt-1.5">{domainError}</p>
+          )}
           {savedDomainsList.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
               {savedDomainsList.map((d) => (
@@ -234,6 +289,62 @@ function AdminDashboard() {
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Regions */}
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base">Regions</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Enable or disable AWS regions. Only enabled regions are shown to
+            users in the region selector.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Default region
+            </label>
+            <Select value={defaultRegion} onValueChange={changeDefaultRegion}>
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[...enabledRegions].sort().map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="rounded-md border divide-y">
+            {ALL_BEDROCK_REGIONS.map((r) => (
+              <div
+                key={r}
+                className="flex items-center justify-between px-4 py-2.5"
+              >
+                <div className="flex items-center gap-2">
+                  <code className="text-sm">{r}</code>
+                  {r === defaultRegion && (
+                    <Badge variant="default" className="text-[10px]">
+                      Default
+                    </Badge>
+                  )}
+                </div>
+                <Button
+                  variant={enabledRegions.has(r) ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs w-20"
+                  disabled={savingRegions}
+                  onClick={() => toggleRegion(r)}
+                >
+                  {enabledRegions.has(r) ? "Enabled" : "Disabled"}
+                </Button>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 

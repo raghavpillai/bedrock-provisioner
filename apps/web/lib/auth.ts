@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
-import { prisma } from "@bedrock-provisioner/db";
+import { prisma } from "@rockbed/db";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {

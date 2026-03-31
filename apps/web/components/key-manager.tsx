@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { client } from "@/lib/orpc";
 import { useRegion } from "@/lib/region-context";
 import { useSession } from "@/lib/auth-client";
-import { EXPIRY_PRESETS } from "@bedrock-provisioner/shared";
-import type { BedrockKey, NewBedrockKey } from "@bedrock-provisioner/shared";
+import { EXPIRY_PRESETS } from "@rockbed/shared";
+import type { BedrockKey, NewBedrockKey } from "@rockbed/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -145,13 +145,13 @@ export function KeyManager() {
       )}
 
       {newKey && (
-        <Card className="border-emerald-800 bg-emerald-950/20">
+        <Card className="border-green-200 bg-green-50">
           <CardContent className="py-4 space-y-3">
-            <p className="text-sm font-medium text-emerald-400">
+            <p className="text-sm font-medium text-green-800">
               Key created successfully. Copy the API key now &mdash; it
               won&apos;t be shown again.
             </p>
-            <div className="rounded-md bg-background/50 p-3 space-y-2 text-sm">
+            <div className="rounded-lg bg-background border p-3 space-y-2 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">API key name</span>
                 <code className="text-xs">{newKey.apiKeyId}</code>
@@ -159,7 +159,7 @@ export function KeyManager() {
               <div className="flex items-center justify-between gap-4">
                 <span className="text-muted-foreground shrink-0">API key</span>
                 <div className="flex items-center gap-2 min-w-0">
-                  <code className="text-xs text-emerald-300 font-mono truncate">
+                  <code className="text-xs font-mono truncate">
                     {newKey.apiKey}
                   </code>
                   <Button

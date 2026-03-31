@@ -1,5 +1,5 @@
 {
-  "name": "@bedrock-provisioner/api",
+  "name": "@rockbed/api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,8 +16,8 @@
     "@aws-sdk/client-bedrock": "^3",
     "@aws-sdk/client-service-quotas": "^3",
     "@aws-sdk/client-sts": "^3",
-    "@bedrock-provisioner/db": "*",
-    "@bedrock-provisioner/shared": "*",
+    "@rockbed/db": "*",
+    "@rockbed/shared": "*",
     "@orpc/server": "latest",
     "zod": "^3"
   },

@@ -1,5 +1,5 @@
 {
-  "name": "bedrock-provisioner",
+  "name": "rockbed",
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {

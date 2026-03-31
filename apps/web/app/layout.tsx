@@ -8,7 +8,7 @@ import { RegionProvider } from "@/lib/region-context";
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Bedrock Provisioner",
+  title: "Rockbed",
   description: "Provision and manage AWS Bedrock API keys",
 };
 
