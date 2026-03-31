@@ -11,5 +11,5 @@
     "turbo": "^2",
     "typescript": "^5.7"
   },
-  "packageManager": "npm@10.8.0"
+  "packageManager": "bun@1.2.9"
 }
