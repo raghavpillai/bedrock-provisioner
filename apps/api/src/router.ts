@@ -305,6 +305,24 @@ const toggleFavorite = os
     }
   });
 
+// -- Settings --
+
+const getSettings = os.handler(async () => {
+  const region = await prisma.setting.findUnique({ where: { key: "default_region" } });
+  return { defaultRegion: region?.value ?? "us-east-1" };
+});
+
+const setDefaultRegion = os
+  .input(z.object({ region: z.string() }))
+  .handler(async ({ input }) => {
+    await prisma.setting.upsert({
+      where: { key: "default_region" },
+      update: { value: input.region },
+      create: { key: "default_region", value: input.region },
+    });
+    return { ok: true };
+  });
+
 // -- Router --
 
 export const router = {
@@ -325,6 +343,10 @@ export const router = {
   favorites: {
     list: listFavorites,
     toggle: toggleFavorite,
+  },
+  settings: {
+    get: getSettings,
+    setRegion: setDefaultRegion,
   },
 };
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { client } from "@/lib/orpc";
 
 const RegionContext = createContext<{
   region: string;
@@ -11,7 +12,20 @@ const RegionContext = createContext<{
 });
 
 export function RegionProvider({ children }: { children: ReactNode }) {
-  const [region, setRegion] = useState("us-east-1");
+  const [region, setRegionState] = useState("us-east-1");
+
+  useEffect(() => {
+    client.settings.get().then((s) => {
+      if (s.defaultRegion) setRegionState(s.defaultRegion);
+    }).catch(() => {});
+  }, []);
+
+  function setRegion(r: string) {
+    setRegionState(r);
+    // Persist to DB
+    client.settings.setRegion({ region: r }).catch(() => {});
+  }
+
   return (
     <RegionContext.Provider value={{ region, setRegion }}>
       {children}
