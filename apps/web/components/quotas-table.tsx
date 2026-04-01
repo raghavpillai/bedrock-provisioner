@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TableRowsSkeleton } from "@/components/skeletons";
+import { Pagination } from "@/components/shared/pagination";
 import { ExternalLinkIcon, MoreVerticalIcon } from "lucide-react";
 
 type SortField = "quotaName" | "tpm" | "rpm";
@@ -353,59 +354,7 @@ export function QuotasTable() {
               )}
             </CardTitle>
             {totalPages > 1 && (
-              <div className="flex items-center gap-0.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  disabled={page === 0}
-                >
-                  ‹
-                </Button>
-                {Array.from({ length: totalPages }, (_, i) => i)
-                  .filter(
-                    (i) =>
-                      i === 0 ||
-                      i === totalPages - 1 ||
-                      Math.abs(i - page) <= 1
-                  )
-                  .reduce<(number | "...")[]>((acc, i) => {
-                    const last = acc[acc.length - 1];
-                    if (typeof last === "number" && i - last > 1) acc.push("...");
-                    acc.push(i);
-                    return acc;
-                  }, [])
-                  .map((item, idx) =>
-                    item === "..." ? (
-                      <span
-                        key={`dots-${idx}`}
-                        className="w-7 text-center text-xs text-muted-foreground"
-                      >
-                        ...
-                      </span>
-                    ) : (
-                      <Button
-                        key={item}
-                        variant={page === item ? "default" : "ghost"}
-                        size="sm"
-                        className="h-7 w-7 p-0 text-xs"
-                        onClick={() => setPage(item)}
-                      >
-                        {item + 1}
-                      </Button>
-                    )
-                  )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                  disabled={page >= totalPages - 1}
-                >
-                  ›
-                </Button>
-              </div>
+              <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
             )}
           </div>
         </CardHeader>

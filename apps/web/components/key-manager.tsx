@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { client } from "@/lib/orpc";
 import { useRegion } from "@/lib/region-context";
 import { useSession } from "@/lib/auth-client";
-import { EXPIRY_PRESETS } from "@rockbed/shared";
-import { CopyIcon, CheckIcon } from "lucide-react";
+import { EXPIRY_PRESETS, calculateCost } from "@rockbed/shared";
+import { CopyButton } from "@/components/shared/copy-button";
 import type { BedrockKey, NewBedrockKey } from "@rockbed/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -175,7 +175,7 @@ export function KeyManager() {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">API key</span>
-                  <CopyIconButton text={newKey.apiKey} />
+                  <CopyButton text={newKey.apiKey} />
                 </div>
                 <code className="text-xs font-mono block break-all bg-muted/50 rounded p-2">
                   {newKey.apiKey}
@@ -256,7 +256,7 @@ export function KeyManager() {
                         {(() => {
                           const s = keyStats[key.friendlyName];
                           if (!s || !s.mtdInv) return <span className="text-muted-foreground text-xs">—</span>;
-                          const cost = (s.mtdIn / 1e6) * 3 + (s.mtdOut / 1e6) * 15;
+                          const cost = calculateCost("blended", s.mtdIn, s.mtdOut);
                           return <span className="text-xs font-mono">${cost.toFixed(2)}</span>;
                         })()}
                       </TableCell>
@@ -265,7 +265,7 @@ export function KeyManager() {
                           const s = keyStats[key.friendlyName];
                           if (!s || !s.recentInv) return <span className="text-muted-foreground text-xs">—</span>;
                           // recentInv now holds lifetime data from the 90-day query
-                          const cost = (s.recentIn / 1e6) * 3 + (s.recentOut / 1e6) * 15;
+                          const cost = calculateCost("blended", s.recentIn, s.recentOut);
                           return <span className="text-xs font-mono">${cost.toFixed(2)}</span>;
                         })()}
                       </TableCell>
@@ -428,21 +428,3 @@ export function KeyManager() {
   );
 }
 
-function CopyIconButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-6 w-6 p-0 shrink-0"
-      onClick={(e) => {
-        e.stopPropagation();
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied ? <CheckIcon className="size-3.5 text-green-600" /> : <CopyIcon className="size-3.5 text-muted-foreground" />}
-    </Button>
-  );
-}
