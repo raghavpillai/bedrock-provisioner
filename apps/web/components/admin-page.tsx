@@ -494,7 +494,7 @@ function AdminDashboard() {
               <strong>{roleDialog?.name ?? roleDialog?.email}</strong>
             </DialogDescription>
           </DialogHeader>
-          <Select value={selectedRole} onValueChange={setSelectedRole}>
+          <Select value={selectedRole} onValueChange={(v) => v && setSelectedRole(v)}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>

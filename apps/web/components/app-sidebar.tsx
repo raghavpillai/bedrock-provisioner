@@ -158,7 +158,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>Region</SidebarGroupLabel>
           <SidebarGroupContent>
             <div className="px-2 pb-1">
-              <Select value={region} onValueChange={setRegion}>
+              <Select value={region} onValueChange={(v) => v && setRegion(v)}>
                 <SelectTrigger className="w-full h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>

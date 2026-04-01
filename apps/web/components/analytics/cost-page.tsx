@@ -164,7 +164,7 @@ export function CostPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
-        <Select value={groupBy} onValueChange={setGroupBy}>
+        <Select value={groupBy} onValueChange={(v) => v && setGroupBy(v)}>
           <SelectTrigger className="w-44">
             <span>Group by: {groupBy === "apiKey" ? "API Key" : groupBy === "user" ? "User" : "Model"}</span>
           </SelectTrigger>
