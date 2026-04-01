@@ -144,7 +144,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Region + Collapse — pushed to bottom */}
+        {/* Region — hidden when collapsed */}
         <SidebarGroup className="mt-auto group-data-[collapsible=icon]:hidden">
           <SidebarGroupLabel>Region</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -165,6 +165,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </div>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Collapse button — visible when collapsed to icon mode */}
+        <SidebarGroup className="hidden group-data-[collapsible=icon]:block">
+          <SidebarGroupContent>
+            <div className="flex justify-center py-1">
+              <SidebarTrigger className="h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent rounded-md" />
+            </div>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter>
@@ -176,8 +185,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </div>
             ) : session ? (
               <DropdownMenu>
-                <DropdownMenuTrigger className="w-full rounded-lg flex items-center gap-2 p-2 text-left hover:bg-sidebar-accent transition-colors">
-                    <div className="flex items-center gap-2 w-full">
+                <DropdownMenuTrigger className="w-full rounded-lg flex items-center gap-2 p-2 text-left hover:bg-sidebar-accent transition-colors overflow-hidden">
+                    <div className="flex items-center gap-2 w-full min-w-0">
                       {session.user.image ? (
                         <img
                           src={session.user.image}
