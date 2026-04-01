@@ -1,5 +1,6 @@
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { CommandMenu } from "@/components/command-menu";
 
 export default function AppLayout({
   children,
@@ -9,12 +10,10 @@ export default function AppLayout({
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
-        <header className="flex h-12 items-center gap-2 px-6 border-b border-border">
-          <SidebarTrigger className="-ml-2" />
-        </header>
-        {children}
+      <SidebarInset className="shadow-[-6px_0_16px_0px_rgba(0,0,0,0.15)] relative z-10">
+        <div className="p-6 min-w-0">{children}</div>
       </SidebarInset>
+      <CommandMenu />
     </SidebarProvider>
   );
 }
