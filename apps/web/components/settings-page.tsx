@@ -1,11 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { client } from "@/lib/orpc";
 import { useRegion } from "@/lib/region-context";
+import { useSession } from "@/lib/auth-client";
 import type { Identity } from "@rockbed/shared";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ShieldIcon, ArrowRightIcon } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -16,6 +20,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function SettingsPage() {
   const { region } = useRegion();
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -94,6 +100,17 @@ export function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {!isAdmin && (
+        <Link href="/admin" className="flex items-center justify-between rounded-lg border px-4 py-2.5 group hover:bg-muted/50 transition-colors">
+          <div className="flex items-center gap-2.5">
+            <ShieldIcon className="size-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Admin Access</span>
+            <span className="text-xs text-muted-foreground">Request admin privileges</span>
+          </div>
+          <ArrowRightIcon className="size-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+        </Link>
+      )}
     </div>
   );
 }

@@ -33,7 +33,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ShieldIcon, LockIcon } from "lucide-react";
+import { ShieldIcon, LockIcon, AlertTriangleIcon, CheckCircleIcon } from "lucide-react";
 
 type User = {
   id: string;
@@ -90,8 +90,8 @@ function AdminGate() {
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="bg-card border border-border rounded-2xl p-8 w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
-          <div className="mx-auto w-11 h-11 rounded-xl bg-muted flex items-center justify-center">
-            <LockIcon className="size-5 text-muted-foreground" />
+          <div className="mx-auto w-11 h-11 rounded-lg bg-aws-squid-ink flex items-center justify-center">
+            <LockIcon className="size-5 text-white" />
           </div>
           <h2 className="text-lg font-semibold">Admin Access</h2>
           <p className="text-sm text-muted-foreground">
@@ -129,13 +129,15 @@ function AdminDashboard() {
   const [enabledRegions, setEnabledRegions] = useState<Set<string>>(new Set(["us-east-1", "us-west-2"]));
   const [defaultRegion, setDefaultRegion] = useState("us-east-1");
   const [savingRegions, setSavingRegions] = useState(false);
+  const [loggingEnabled, setLoggingEnabled] = useState(false);
+  const [togglingLogging, setTogglingLogging] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const [adminRes, settingsRes] = await Promise.all([
         fetch("/api/admin"),
-        client.settings.get(),
+        client.settings.get({ region: "us-east-1" }),
       ]);
       const data = await adminRes.json();
       setUsers(data.users ?? []);
@@ -143,6 +145,7 @@ function AdminDashboard() {
       setDomainsInput(data.allowedDomains ?? "");
       setEnabledRegions(new Set(settingsRes.enabledRegions));
       setDefaultRegion(settingsRes.defaultRegion);
+      setLoggingEnabled(settingsRes.invocationLoggingEnabled);
     } catch {}
     setLoading(false);
   }, []);
@@ -215,6 +218,18 @@ function AdminDashboard() {
     refresh();
   }
 
+  async function toggleInvocationLogging() {
+    setTogglingLogging(true);
+    try {
+      await client.settings.enableInvocationLogging({
+        region: defaultRegion,
+        enable: !loggingEnabled,
+      });
+      setLoggingEnabled(!loggingEnabled);
+    } catch {}
+    setTogglingLogging(false);
+  }
+
   // Only show saved domains as badges, not the live input
   const savedDomainsList = allowedDomains
     ? allowedDomains.split(",").map((d) => d.trim()).filter(Boolean)
@@ -231,6 +246,55 @@ function AdminDashboard() {
           </p>
         </div>
       </div>
+
+      {/* Invocation Logging */}
+      {loggingEnabled ? (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-start gap-3">
+            <CheckCircleIcon className="size-5 text-green-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-green-800">
+                Model invocation logging is enabled
+              </p>
+              <p className="text-xs text-green-700 mt-0.5">
+                Per-key usage statistics are being collected via CloudWatch Logs.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={toggleInvocationLogging}
+            disabled={togglingLogging}
+          >
+            {togglingLogging ? "Disabling..." : "Disable"}
+          </Button>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangleIcon className="size-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">
+                Model invocation logging is not enabled
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Enable logging to track per-key usage statistics. This creates
+                an IAM role and CloudWatch log group automatically.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={toggleInvocationLogging}
+            disabled={togglingLogging}
+          >
+            {togglingLogging ? "Enabling..." : "Enable logging"}
+          </Button>
+        </div>
+      )}
 
       {/* Allowed Domains */}
       <Card>
