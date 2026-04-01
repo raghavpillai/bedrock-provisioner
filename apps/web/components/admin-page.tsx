@@ -197,7 +197,8 @@ function AdminDashboard() {
     setSavingRegions(false);
   }
 
-  async function changeDefaultRegion(region: string) {
+  async function changeDefaultRegion(region: string | null) {
+    if (!region) return;
     setDefaultRegion(region);
     if (!enabledRegions.has(region)) {
       const next = new Set(enabledRegions);
