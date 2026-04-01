@@ -175,7 +175,7 @@ export function CostPage() {
           </SelectContent>
         </Select>
 
-        <Select value={filterUser || "_all"} onValueChange={(v) => setFilterUser(v === "_all" ? "" : v)}>
+        <Select value={filterUser || "_all"} onValueChange={(v) => setFilterUser(!v || v === "_all" ? "" : v)}>
           <SelectTrigger className="w-44">
             <span>API key: {filterUser ? apiKeys.find(k => k.userName === filterUser)?.name ?? filterUser : "All"}</span>
           </SelectTrigger>
