@@ -167,51 +167,40 @@ const listKeys = os.input(RegionInput).handler(async ({ input }) => {
     u.UserName?.startsWith(USER_PREFIX)
   );
 
-  const keys = [];
-  for (const user of bedrockUsers) {
-    const [credsRes, tagsRes] = await Promise.all([
-      iam.send(
-        new ListServiceSpecificCredentialsCommand({
-          UserName: user.UserName!,
-          ServiceName: BEDROCK_SERVICE_NAME,
-        })
-      ),
-      iam.send(new ListUserTagsCommand({ UserName: user.UserName! })).catch(
-        () => ({ Tags: [] })
-      ),
-    ]);
+  const keyResults = await Promise.all(
+    bedrockUsers.map(async (user) => {
+      const [credsRes, tagsRes] = await Promise.all([
+        iam.send(
+          new ListServiceSpecificCredentialsCommand({
+            UserName: user.UserName!,
+            ServiceName: BEDROCK_SERVICE_NAME,
+          })
+        ),
+        iam.send(new ListUserTagsCommand({ UserName: user.UserName! })).catch(
+          () => ({ Tags: [] })
+        ),
+      ]);
 
-    const tags = tagsRes.Tags ?? [];
-    const expiresAtTag = tags.find(
-      (t) => t.Key === "rockbed:expiresAt"
-    );
-    const expiresAt =
-      expiresAtTag?.Value && expiresAtTag.Value !== "never"
-        ? expiresAtTag.Value
-        : null;
-    const createdByTag = tags.find(
-      (t) => t.Key === "rockbed:createdBy"
-    );
-    const createdBy =
-      createdByTag?.Value && createdByTag.Value !== "unknown"
-        ? createdByTag.Value
-        : null;
+      const tags = tagsRes.Tags ?? [];
+      const expiresAt =
+        tags.find((t) => t.Key === "rockbed:expiresAt")?.Value;
+      const createdBy =
+        tags.find((t) => t.Key === "rockbed:createdBy")?.Value;
 
-    for (const cred of credsRes.ServiceSpecificCredentials ?? []) {
-      keys.push({
+      return (credsRes.ServiceSpecificCredentials ?? []).map((cred) => ({
         userName: user.UserName!,
         friendlyName: user.UserName!.replace(USER_PREFIX, ""),
         credentialId: cred.ServiceSpecificCredentialId!,
         apiKeyId: cred.ServiceCredentialAlias!,
         status: cred.Status!,
         createdAt: cred.CreateDate!.toISOString(),
-        expiresAt,
-        createdBy,
-      });
-    }
-  }
+        expiresAt: expiresAt && expiresAt !== "never" ? expiresAt : null,
+        createdBy: createdBy && createdBy !== "unknown" ? createdBy : null,
+      }));
+    })
+  );
 
-  return keys;
+  return keyResults.flat();
 });
 
 const deleteKey = os.input(DeleteKeyInput).handler(async ({ input }) => {
