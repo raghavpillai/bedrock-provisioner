@@ -144,20 +144,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {/* Collapse + Region — pushed to bottom */}
-        <SidebarGroup className="mt-auto">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarTrigger className="w-full justify-start gap-2 px-2 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent" />
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+        {/* Region + Collapse — pushed to bottom */}
+        <SidebarGroup className="mt-auto group-data-[collapsible=icon]:hidden">
           <SidebarGroupLabel>Region</SidebarGroupLabel>
           <SidebarGroupContent>
-            <div className="px-2 pb-1">
+            <div className="px-2 pb-1 flex items-end gap-1.5">
               <Select value={region} onValueChange={(v) => v && setRegion(v)}>
                 <SelectTrigger className="w-full h-8 text-xs">
                   <SelectValue />
@@ -170,6 +161,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   ))}
                 </SelectContent>
               </Select>
+              <SidebarTrigger className="shrink-0 h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent rounded-md" />
             </div>
           </SidebarGroupContent>
         </SidebarGroup>
