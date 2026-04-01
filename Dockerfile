@@ -1,4 +1,4 @@
-FROM oven/bun:1 AS base
+FROM oven/bun:1.3 AS base
 WORKDIR /app
 
 # Install dependencies
@@ -21,7 +21,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN cd apps/web && bun run build
 
 # Production
-FROM oven/bun:1-slim AS runner
+FROM oven/bun:1.3-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
