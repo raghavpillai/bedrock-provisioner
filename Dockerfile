@@ -21,16 +21,20 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN cd apps/web && bun run build
 
 # Production
-FROM base AS runner
+FROM oven/bun:1-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Only copy the standalone build + Prisma engine (not full node_modules)
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
-COPY --from=builder /app/node_modules/.bun ./node_modules/.bun
+
+# Copy only the Prisma client (not the entire .bun cache)
+COPY --from=deps /app/node_modules/.bun/@prisma+client*/node_modules/@prisma/client ./node_modules/@prisma/client
+COPY --from=deps /app/node_modules/.bun/@prisma+client*/node_modules/.prisma ./node_modules/.prisma
 
 EXPOSE 3000
 ENV PORT=3000
