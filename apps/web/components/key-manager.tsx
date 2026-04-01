@@ -91,7 +91,8 @@ export function KeyManager() {
     refresh();
   }, [refresh]);
 
-  function handleExpiryChange(value: string) {
+  function handleExpiryChange(value: string | null) {
+    if (!value) return;
     setCreateExpiryPreset(value);
     const days = parseInt(value, 10);
     if (days >= 0) {
