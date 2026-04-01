@@ -13,20 +13,22 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-background">
-      <div className="bg-card border border-border rounded-2xl p-8 w-full max-w-sm space-y-6">
-        <div className="text-center space-y-2">
-          <div className="mx-auto w-11 h-11 rounded-xl bg-primary flex items-center justify-center text-primary-foreground text-lg font-bold">
+      <div className="bg-card border border-border rounded-xl shadow-sm p-8 w-full max-w-sm space-y-6">
+        <div className="text-center space-y-3">
+          <div className="mx-auto w-12 h-12 rounded-lg bg-aws-orange flex items-center justify-center text-aws-squid-ink text-xl font-bold">
             R
           </div>
-          <h1 className="text-xl font-semibold">Log in to Rockbed</h1>
-          <p className="text-sm text-muted-foreground">
-            Sign in with your Google account to continue.
-          </p>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Rockbed</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Sign in to manage your Bedrock API keys.
+            </p>
+          </div>
         </div>
 
         <Button
           variant="outline"
-          className="w-full gap-2 h-11 rounded-xl"
+          className="w-full gap-2.5 h-11 rounded-lg font-medium"
           onClick={handleGoogleSignIn}
         >
           <svg className="size-4" viewBox="0 0 24 24">
@@ -49,10 +51,13 @@ export default function LoginPage() {
           </svg>
           Continue with Google
         </Button>
+
+        <div className="h-px bg-border" />
+
+        <p className="text-[11px] text-muted-foreground text-center">
+          Only authorized accounts can access this application.
+        </p>
       </div>
-      <p className="text-xs text-muted-foreground mt-6">
-        Only authorized accounts can access this application.
-      </p>
     </div>
   );
 }
