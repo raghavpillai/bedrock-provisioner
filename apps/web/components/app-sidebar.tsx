@@ -182,16 +182,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </div>
             ) : session ? (
               <DropdownMenu>
-                <DropdownMenuTrigger className="w-full rounded-lg flex items-center gap-2 p-2 text-left hover:bg-sidebar-accent transition-colors overflow-hidden">
-                    <div className="flex items-center gap-2 w-full min-w-0">
+                <DropdownMenuTrigger className="w-full rounded-lg flex items-center gap-2 p-2 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:justify-center text-left hover:bg-sidebar-accent transition-colors overflow-hidden">
+                    <div className="flex items-center gap-2 w-full min-w-0 group-data-[collapsible=icon]:justify-center">
                       {session.user.image ? (
                         <img
                           src={session.user.image}
                           alt=""
-                          className="size-8 rounded-lg shrink-0 object-cover"
+                          className="size-8 group-data-[collapsible=icon]:size-7 rounded-lg group-data-[collapsible=icon]:rounded-full shrink-0 object-cover transition-all"
                         />
                       ) : (
-                        <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-accent text-sidebar-accent-foreground text-xs font-bold shrink-0">
+                        <div className="flex aspect-square size-8 group-data-[collapsible=icon]:size-7 items-center justify-center rounded-lg group-data-[collapsible=icon]:rounded-full bg-sidebar-accent text-sidebar-accent-foreground text-xs font-bold shrink-0 transition-all">
                           {(
                             session.user.name?.[0] ?? session.user.email[0]
                           ).toUpperCase()}
