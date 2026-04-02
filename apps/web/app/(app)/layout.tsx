@@ -18,7 +18,7 @@ export default async function AppLayout({
   return (
     <SidebarProvider className="bg-sidebar">
       <AppSidebar />
-      <SidebarInset className="relative z-10 my-2 mr-2 rounded-xl shadow-[0_-2px_16px_0px_rgba(0,0,0,0.15),-6px_0_16px_0px_rgba(0,0,0,0.15)] ring-1 ring-border/20">
+      <SidebarInset className="relative z-10 !w-auto my-2 mr-2 rounded-xl shadow-[0_-2px_16px_0px_rgba(0,0,0,0.15),-6px_0_16px_0px_rgba(0,0,0,0.15)] ring-1 ring-border/20 overflow-hidden">
         <div className="p-6 min-w-0">{children}</div>
       </SidebarInset>
       <CommandMenu />
