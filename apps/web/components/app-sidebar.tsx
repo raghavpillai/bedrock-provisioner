@@ -173,7 +173,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarTrigger className="h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent rounded-md" />
       </div>
 
-      <SidebarFooter>
+      <SidebarFooter className="group-data-[collapsible=icon]:p-1.5">
         <SidebarMenu>
           <SidebarMenuItem>
             {isPending ? (
@@ -188,10 +188,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <img
                           src={session.user.image}
                           alt=""
-                          className="size-8 group-data-[collapsible=icon]:size-7 rounded-lg group-data-[collapsible=icon]:rounded-full shrink-0 object-cover transition-all duration-200 ease-linear"
+                          className="size-8 group-data-[collapsible=icon]:size-6 rounded-lg group-data-[collapsible=icon]:rounded-full shrink-0 object-cover transition-all duration-200 ease-linear"
                         />
                       ) : (
-                        <div className="flex aspect-square size-8 group-data-[collapsible=icon]:size-7 items-center justify-center rounded-lg group-data-[collapsible=icon]:rounded-full bg-sidebar-accent text-sidebar-accent-foreground text-xs font-bold shrink-0 transition-all duration-200 ease-linear">
+                        <div className="flex aspect-square size-8 group-data-[collapsible=icon]:size-6 items-center justify-center rounded-lg group-data-[collapsible=icon]:rounded-full bg-sidebar-accent text-sidebar-accent-foreground text-xs font-bold shrink-0 transition-all duration-200 ease-linear">
                           {(
                             session.user.name?.[0] ?? session.user.email[0]
                           ).toUpperCase()}
