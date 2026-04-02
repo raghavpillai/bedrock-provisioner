@@ -173,7 +173,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarTrigger className="h-8 w-8 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent rounded-md" />
       </div>
 
-      <SidebarFooter className="group-data-[collapsible=icon]:p-0">
+      <SidebarFooter className="transition-all duration-200 ease-linear group-data-[collapsible=icon]:p-0">
         <SidebarMenu>
           <SidebarMenuItem>
             {isPending ? (
