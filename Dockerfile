@@ -9,7 +9,7 @@ COPY apps/api/package.json apps/api/
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
 COPY packages/db/prisma/schema.prisma packages/db/prisma/
-RUN bun install --frozen-lockfile
+RUN bun install
 RUN cd packages/db && bunx prisma generate
 
 # Build
