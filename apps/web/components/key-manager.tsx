@@ -85,13 +85,22 @@ export function KeyManager() {
     }
   }, [region]);
 
-  // Fetch per-key usage stats
+  // Fetch per-key usage stats (scoped to active key creation dates)
   useEffect(() => {
-    fetch(`/api/analytics/keys?region=${region}`)
+    if (keys.length === 0 && refreshing) return;
+    const activeKeys: Record<string, string> = {};
+    for (const k of keys) {
+      activeKeys[k.friendlyName] = k.createdAt;
+    }
+    const params = new URLSearchParams({ region });
+    if (Object.keys(activeKeys).length > 0) {
+      params.set("activeKeys", JSON.stringify(activeKeys));
+    }
+    fetch(`/api/analytics/keys?${params}`)
       .then((r) => r.json())
       .then(setKeyStats)
       .catch(() => {});
-  }, [region]);
+  }, [region, keys, refreshing]);
 
   useEffect(() => {
     refresh();
@@ -324,6 +333,28 @@ export function KeyManager() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {keyStats["__unattributed__"] && (() => {
+                    const s = keyStats["__unattributed__"];
+                    const mtdCost = s.mtdInv ? calculateCost("blended", s.mtdIn, s.mtdOut) : 0;
+                    const lifetimeCost = s.recentInv ? calculateCost("blended", s.recentIn, s.recentOut) : 0;
+                    if (!mtdCost && !lifetimeCost) return null;
+                    return (
+                      <TableRow className="text-muted-foreground/70 italic">
+                        <TableCell className="whitespace-nowrap">Deleted keys</TableCell>
+                        <TableCell />
+                        <TableCell />
+                        <TableCell />
+                        <TableCell className="text-right text-xs font-mono">
+                          {mtdCost ? `$${mtdCost.toFixed(2)}` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-mono">
+                          {lifetimeCost ? `$${lifetimeCost.toFixed(2)}` : "—"}
+                        </TableCell>
+                        <TableCell />
+                        <TableCell />
+                      </TableRow>
+                    );
+                  })()}
                 </TableBody>
               </Table>
             </div>
