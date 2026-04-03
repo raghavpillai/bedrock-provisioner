@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { client } from "@/lib/orpc";
 import { useRegion } from "@/lib/region-context";
 import {
@@ -11,7 +11,11 @@ import {
   monthName,
   CHART_COLORS,
   sanitizeKey,
+  aggregateByModel,
+  aggregateByUser,
+  modelsForUser,
   type AnalyticsFilters,
+  type DailyRow,
 } from "./use-analytics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -26,7 +30,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
 } from "@/components/ui/chart";
@@ -50,6 +53,10 @@ export function CostPage() {
   const [groupBy, setGroupBy] = useState("user");
   const [filterUser, setFilterUser] = useState("");
   const [apiKeys, setApiKeys] = useState<{ name: string; userName: string }[]>([]);
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
+  const [drillDay, setDrillDay] = useState<string | null>(null);
+  const [hourlyData, setHourlyData] = useState<DailyRow[] | null>(null);
+  const [hourlyLoading, setHourlyLoading] = useState(false);
 
   useEffect(() => {
     client.keys.list({ region }).then((keys) =>
@@ -60,10 +67,23 @@ export function CostPage() {
   const filters: AnalyticsFilters = {};
   if (filterUser) filters.user = filterUser;
 
-  const { data: modelData, loading: modelLoading } = useAnalytics("model", year, month, filters);
-  const { data: groupData, loading: groupLoading } = useAnalytics(groupBy, year, month, filters);
-  const loading = modelLoading || groupLoading;
-  const data = groupBy === "model" ? modelData : groupData;
+  // Single two-dimensional query — groupBy only controls email resolution
+  const { data, loading } = useAnalytics(groupBy, year, month, filters);
+
+  // Hourly drill-down fetch
+  useEffect(() => {
+    if (!drillDay) { setHourlyData(null); return; }
+    setHourlyLoading(true);
+    const params = new URLSearchParams({
+      region, groupBy: "model", year: String(year), month: String(month),
+      granularity: "hour", day: drillDay,
+    });
+    fetch(`/api/analytics?${params}`)
+      .then((r) => r.json())
+      .then((d) => setHourlyData(d.daily))
+      .catch(() => setHourlyData(null))
+      .finally(() => setHourlyLoading(false));
+  }, [drillDay, region, year, month]);
 
   function prevMonth() {
     if (month === 1) { setMonth(12); setYear(year - 1); }
@@ -74,26 +94,32 @@ export function CostPage() {
     else setMonth(month + 1);
   }
 
-  // Calculate costs from model data (need model names for pricing)
+  // Total cost from model-level aggregation with cache-aware pricing
   const totalCost = useMemo(() => {
-    if (!modelData?.summary.length) return 0;
-    return modelData.summary.reduce(
-      (acc, r) => acc + calculateCost(r.groupKey, r.totalIn, r.totalOut),
-      0
+    if (!data?.summary.length) return 0;
+    return aggregateByModel(data.summary).reduce(
+      (acc, r) => acc + calculateCost(r.modelKey, r.totalIn, r.totalOut, r.cacheRead, r.cacheWrite),
+      0,
     );
-  }, [modelData]);
+  }, [data]);
+
+  // Total cache read tokens
+  const totalCacheRead = useMemo(() => {
+    if (!data?.summary.length) return 0;
+    return data.summary.reduce((a, r) => a + r.cacheRead, 0);
+  }, [data]);
 
   // Pie chart data by model
   const pieData = useMemo(() => {
-    if (!modelData?.summary.length) return [];
-    return modelData.summary
+    if (!data?.summary.length) return [];
+    return aggregateByModel(data.summary)
       .map((r) => ({
-        name: r.groupKey,
-        value: calculateCost(r.groupKey, r.totalIn, r.totalOut),
+        name: r.modelKey,
+        value: calculateCost(r.modelKey, r.totalIn, r.totalOut, r.cacheRead, r.cacheWrite),
       }))
       .filter((d) => d.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [modelData]);
+  }, [data]);
 
   const pieConfig = useMemo(() => {
     const config: Record<string, { label: string; color: string }> = {};
@@ -103,23 +129,29 @@ export function CostPage() {
     return config;
   }, [pieData]);
 
-  // Daily cost chart
-  const { dailyCostData, dailyConfig, dailyKeys } = useMemo(() => {
-    if (!modelData?.daily.length) return { dailyCostData: [], dailyConfig: {}, dailyKeys: [] };
+  // Daily cost chart (from model-aggregated daily data)
+  const { dailyCostData, dailyConfig, dailyKeys, dayLabelToDate } = useMemo(() => {
+    const rows = data?.daily ?? [];
+    if (!rows.length) return { dailyCostData: [], dailyConfig: {}, dailyKeys: [], dayLabelToDate: new Map<string, string>() };
 
-    const rawKeys = [...new Set(modelData.daily.map((d) => d.groupKey))];
+    // Aggregate daily rows by model
+    const rawKeys = [...new Set(rows.map((d) => d.modelKey))];
     const keyMap = new Map(rawKeys.map((k) => [k, sanitizeKey(k)]));
     const safeKeys = rawKeys.map((k) => keyMap.get(k)!);
+    const labelToDate = new Map<string, string>();
 
     const byDay = new Map<string, Record<string, number>>();
-    for (const row of modelData.daily) {
+    for (const row of rows) {
       const dayKey = new Date(row.day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      // Store ISO date for drill-down
+      const isoDay = new Date(row.day).toISOString().slice(0, 10);
+      labelToDate.set(dayKey, isoDay);
       if (!byDay.has(dayKey)) byDay.set(dayKey, {});
       const entry = byDay.get(dayKey)!;
       entry.day = dayKey as any;
-      const safe = keyMap.get(row.groupKey)!;
+      const safe = keyMap.get(row.modelKey)!;
       entry[safe] =
-        (entry[safe] ?? 0) + calculateCost(row.groupKey, row.totalIn, row.totalOut);
+        (entry[safe] ?? 0) + calculateCost(row.modelKey, row.totalIn, row.totalOut, row.cacheRead, row.cacheWrite);
     }
 
     const config: Record<string, { label: string; color: string }> = {};
@@ -131,34 +163,74 @@ export function CostPage() {
       dailyCostData: Array.from(byDay.values()),
       dailyConfig: config,
       dailyKeys: safeKeys,
+      dayLabelToDate: labelToDate,
     };
-  }, [modelData]);
+  }, [data]);
 
-  // Breakdown table (uses the selected groupBy data)
+  // Hourly chart data
+  const { hourlyCostData, hourlyConfig, hourlyKeys } = useMemo(() => {
+    if (!hourlyData?.length) return { hourlyCostData: [], hourlyConfig: {}, hourlyKeys: [] };
+
+    const rawKeys = [...new Set(hourlyData.map((d) => d.modelKey))];
+    const keyMap = new Map(rawKeys.map((k) => [k, sanitizeKey(k)]));
+    const safeKeys = rawKeys.map((k) => keyMap.get(k)!);
+
+    const byHour = new Map<string, Record<string, number>>();
+    for (const row of hourlyData) {
+      const hourKey = new Date(row.day).toLocaleTimeString("en-US", { hour: "numeric", hour12: true });
+      if (!byHour.has(hourKey)) byHour.set(hourKey, {});
+      const entry = byHour.get(hourKey)!;
+      entry.day = hourKey as any;
+      const safe = keyMap.get(row.modelKey)!;
+      entry[safe] =
+        (entry[safe] ?? 0) + calculateCost(row.modelKey, row.totalIn, row.totalOut, row.cacheRead, row.cacheWrite);
+    }
+
+    const config: Record<string, { label: string; color: string }> = {};
+    rawKeys.forEach((k, i) => {
+      config[keyMap.get(k)!] = { label: k, color: CHART_COLORS[i % CHART_COLORS.length] };
+    });
+
+    return {
+      hourlyCostData: Array.from(byHour.values()),
+      hourlyConfig: config,
+      hourlyKeys: safeKeys,
+    };
+  }, [hourlyData]);
+
+  // Breakdown table with expandable rows
   const costBreakdown = useMemo(() => {
-    if (groupBy === "model" && modelData?.summary) {
-      return modelData.summary.map((r) => ({
+    if (!data?.summary.length) return [];
+    if (groupBy === "model") {
+      return aggregateByModel(data.summary).map((r) => ({
         ...r,
-        cost: calculateCost(r.groupKey, r.totalIn, r.totalOut),
+        groupKey: r.modelKey,
+        cost: calculateCost(r.modelKey, r.totalIn, r.totalOut, r.cacheRead, r.cacheWrite),
       }));
     }
-    // For apiKey/user groupBy, estimate cost using blended rate
-    if (data?.summary) {
-      return data.summary.map((r) => ({
-        ...r,
-        // Use a blended estimate: ~$5/M in, ~$20/M out (weighted avg)
-        cost: calculateCost("blended", r.totalIn, r.totalOut),
-      }));
-    }
-    return [];
-  }, [data, modelData, groupBy]);
+    // user or apiKey: aggregate by user, each row's cost is sum of per-model costs
+    return aggregateByUser(data.summary).map((r) => ({
+      ...r,
+      groupKey: r.userKey,
+      cost: modelsForUser(data.summary, r.userKey).reduce(
+        (acc, m) => acc + calculateCost(m.modelKey, m.totalIn, m.totalOut, m.cacheRead, m.cacheWrite),
+        0,
+      ),
+    }));
+  }, [data, groupBy]);
+
+  // Chart data/config to render (daily or hourly)
+  const chartData = drillDay ? hourlyCostData : dailyCostData;
+  const chartConfig = drillDay ? hourlyConfig : dailyConfig;
+  const chartKeys = drillDay ? hourlyKeys : dailyKeys;
+  const chartLoading = drillDay ? hourlyLoading : loading;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Cost</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Estimated costs based on Bedrock on-demand pricing.
+          Costs based on Bedrock on-demand pricing.
         </p>
       </div>
 
@@ -203,11 +275,11 @@ export function CostPage() {
       </div>
 
       {/* Cost summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-4 pb-4 flex items-center justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Total token cost</p>
+              <p className="text-sm text-muted-foreground">Total cost</p>
               {loading ? (
                 <Skeleton className="h-8 w-32 mt-1" />
               ) : (
@@ -245,7 +317,7 @@ export function CostPage() {
             ) : (
               <p className="text-2xl font-bold mt-1">
                 {formatNumber(
-                  modelData?.summary.reduce((a, r) => a + r.totalIn, 0) ?? 0
+                  data?.summary.reduce((a, r) => a + r.totalIn, 0) ?? 0
                 )}
               </p>
             )}
@@ -259,29 +331,60 @@ export function CostPage() {
             ) : (
               <p className="text-2xl font-bold mt-1">
                 {formatNumber(
-                  modelData?.summary.reduce((a, r) => a + r.totalOut, 0) ?? 0
+                  data?.summary.reduce((a, r) => a + r.totalOut, 0) ?? 0
                 )}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <p className="text-sm text-muted-foreground">Cache read tokens</p>
+            {loading ? (
+              <Skeleton className="h-8 w-32 mt-1" />
+            ) : (
+              <p className="text-2xl font-bold mt-1">
+                {formatNumber(totalCacheRead)}
               </p>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Daily cost chart */}
+      {/* Daily/Hourly cost chart */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Daily token cost</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">
+              {drillDay ? `Hourly cost — ${drillDay}` : "Daily cost"}
+            </CardTitle>
+            {drillDay && (
+              <Button variant="ghost" size="sm" onClick={() => setDrillDay(null)}>
+                <ChevronLeftIcon className="size-4 mr-1" />
+                Back to monthly
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          {loading ? (
+          {chartLoading ? (
             <Skeleton className="h-80 w-full" />
-          ) : dailyCostData.length === 0 ? (
+          ) : chartData.length === 0 ? (
             <div className="h-80 flex items-center justify-center text-sm text-muted-foreground">
               No cost data for this period.
             </div>
           ) : (
-            <ChartContainer config={dailyConfig} className="h-80 w-full">
-              <BarChart data={dailyCostData} barCategoryGap="20%">
+            <ChartContainer config={chartConfig} className="h-80 w-full">
+              <BarChart
+                data={chartData}
+                barCategoryGap="20%"
+                onClick={(state) => {
+                  if (drillDay || !state?.activeLabel) return;
+                  const isoDay = dayLabelToDate.get(String(state.activeLabel));
+                  if (isoDay) setDrillDay(isoDay);
+                }}
+                style={{ cursor: drillDay ? "default" : "pointer" }}
+              >
                 <CartesianGrid vertical={false} strokeDasharray="3 3" />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={12} />
                 <YAxis
@@ -299,16 +402,19 @@ export function CostPage() {
                         {payload.filter((p: any) => p.value > 0).map((p: any) => (
                           <div key={p.dataKey} className="flex items-center gap-2 py-0.5">
                             <span className="size-2.5 rounded-full shrink-0" style={{ background: p.fill }} />
-                            <span className="text-muted-foreground">{dailyConfig[p.dataKey]?.label ?? p.dataKey}:</span>
+                            <span className="text-muted-foreground">{chartConfig[p.dataKey]?.label ?? p.dataKey}:</span>
                             <span className="font-mono font-medium ml-auto">{formatCurrency(p.value)}</span>
                           </div>
                         ))}
+                        {!drillDay && (
+                          <p className="text-xs text-muted-foreground mt-1.5">Click to drill into hourly view</p>
+                        )}
                       </div>
                     );
                   }}
                 />
                 <ChartLegend content={<ChartLegendContent />} />
-                {dailyKeys.map((key, i) => (
+                {chartKeys.map((key, i) => (
                   <Bar
                     key={key}
                     dataKey={key}
@@ -341,19 +447,58 @@ export function CostPage() {
                     </th>
                     <th className="text-right p-3 font-medium text-muted-foreground">Tokens in</th>
                     <th className="text-right p-3 font-medium text-muted-foreground">Tokens out</th>
+                    <th className="text-right p-3 font-medium text-muted-foreground">Cache read</th>
+                    <th className="text-right p-3 font-medium text-muted-foreground">Cache write</th>
                     <th className="text-right p-3 font-medium text-muted-foreground">Invocations</th>
-                    <th className="text-right p-3 font-medium text-muted-foreground">Est. cost</th>
+                    <th className="text-right p-3 font-medium text-muted-foreground">Cost</th>
                   </tr>
                 </thead>
                 <tbody>
                   {costBreakdown.map((row, i) => (
-                    <tr key={`${row.groupKey}-${i}`} className="border-b last:border-0">
-                      <td className="p-3 font-medium">{row.groupKey}</td>
-                      <td className="p-3 text-right font-mono">{formatNumber(row.totalIn)}</td>
-                      <td className="p-3 text-right font-mono">{formatNumber(row.totalOut)}</td>
-                      <td className="p-3 text-right font-mono">{formatNumber(row.invocations)}</td>
-                      <td className="p-3 text-right font-mono">{formatCurrency(row.cost)}</td>
-                    </tr>
+                    <React.Fragment key={`${row.groupKey}-${i}`}>
+                      <tr
+                        className={`border-b last:border-0 ${groupBy !== "model" ? "cursor-pointer hover:bg-muted/50" : ""}`}
+                        onClick={() => {
+                          if (groupBy === "model") return;
+                          setExpandedUsers((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(row.groupKey)) next.delete(row.groupKey);
+                            else next.add(row.groupKey);
+                            return next;
+                          });
+                        }}
+                      >
+                        <td className="p-3 font-medium">
+                          {groupBy !== "model" && (
+                            <ChevronRightIcon
+                              className={`inline size-4 mr-1 transition-transform ${expandedUsers.has(row.groupKey) ? "rotate-90" : ""}`}
+                            />
+                          )}
+                          {row.groupKey}
+                        </td>
+                        <td className="p-3 text-right font-mono">{formatNumber(row.totalIn)}</td>
+                        <td className="p-3 text-right font-mono">{formatNumber(row.totalOut)}</td>
+                        <td className="p-3 text-right font-mono">{formatNumber(row.cacheRead)}</td>
+                        <td className="p-3 text-right font-mono">{formatNumber(row.cacheWrite)}</td>
+                        <td className="p-3 text-right font-mono">{formatNumber(row.invocations)}</td>
+                        <td className="p-3 text-right font-mono">{formatCurrency(row.cost)}</td>
+                      </tr>
+                      {groupBy !== "model" && expandedUsers.has(row.groupKey) &&
+                        modelsForUser(data!.summary, row.userKey).map((m, j) => (
+                          <tr key={`${row.groupKey}-${m.modelKey}-${j}`} className="border-b last:border-0 bg-muted/30">
+                            <td className="p-3 pl-8 text-sm text-muted-foreground">{m.modelKey}</td>
+                            <td className="p-3 text-right font-mono text-sm">{formatNumber(m.totalIn)}</td>
+                            <td className="p-3 text-right font-mono text-sm">{formatNumber(m.totalOut)}</td>
+                            <td className="p-3 text-right font-mono text-sm">{formatNumber(m.cacheRead)}</td>
+                            <td className="p-3 text-right font-mono text-sm">{formatNumber(m.cacheWrite)}</td>
+                            <td className="p-3 text-right font-mono text-sm">{formatNumber(m.invocations)}</td>
+                            <td className="p-3 text-right font-mono text-sm">
+                              {formatCurrency(calculateCost(m.modelKey, m.totalIn, m.totalOut, m.cacheRead, m.cacheWrite))}
+                            </td>
+                          </tr>
+                        ))
+                      }
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
