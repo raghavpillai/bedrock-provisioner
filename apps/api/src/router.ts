@@ -487,6 +487,33 @@ const setDailyLimit = os
     return { success: true };
   });
 
+const toggleKey = os
+  .input(z.object({
+    region: z.string(),
+    userName: z.string(),
+    credentialId: z.string(),
+    active: z.boolean(),
+  }))
+  .handler(async ({ input }) => {
+    const { iam } = createClients(input.region);
+    await iam.send(
+      new UpdateServiceSpecificCredentialCommand({
+        UserName: input.userName,
+        ServiceSpecificCredentialId: input.credentialId,
+        Status: input.active ? "Active" : "Inactive",
+      })
+    );
+    if (input.active) {
+      await iam.send(
+        new TagUserCommand({
+          UserName: input.userName,
+          Tags: [{ Key: "rockbed:autoDisabledAt", Value: "" }],
+        })
+      );
+    }
+    return { success: true };
+  });
+
 // -- Router --
 
 export const router = {
@@ -501,6 +528,7 @@ export const router = {
     list: listKeys,
     delete: deleteKey,
     setDailyLimit,
+    toggle: toggleKey,
   },
   quotas: {
     list: listQuotas,

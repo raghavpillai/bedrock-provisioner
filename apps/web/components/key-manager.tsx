@@ -6,7 +6,7 @@ import { useRegion } from "@/lib/region-context";
 import { useSession } from "@/lib/auth-client";
 import { EXPIRY_PRESETS, calculateCost } from "@rockbed/shared";
 import { CopyButton } from "@/components/shared/copy-button";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, PauseIcon, PlayIcon } from "lucide-react";
 import type { BedrockKey, NewBedrockKey } from "@rockbed/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +87,7 @@ export function KeyManager() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [editingLimit, setEditingLimit] = useState<string | null>(null);
   const [limitValue, setLimitValue] = useState("");
+  const [toggling, setToggling] = useState<string | null>(null);
 
   async function saveLimit(key: BedrockKey) {
     const val = limitValue.trim();
@@ -97,6 +98,23 @@ export function KeyManager() {
       setEditingLimit(null);
       await refresh();
     } catch {}
+  }
+
+  async function handleToggle(key: BedrockKey) {
+    setToggling(key.credentialId);
+    try {
+      await client.keys.toggle({
+        region,
+        userName: key.userName,
+        credentialId: key.credentialId,
+        active: key.status !== "Active",
+      });
+      await refresh();
+    } catch (err: any) {
+      setError(err.message ?? "Failed to toggle key");
+    } finally {
+      setToggling(null);
+    }
   }
 
   const refresh = useCallback(async () => {
@@ -271,6 +289,7 @@ export function KeyManager() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>API key ID</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Created by</TableHead>
@@ -288,6 +307,21 @@ export function KeyManager() {
                     <TableRow key={key.credentialId}>
                       <TableCell className="font-medium whitespace-nowrap">
                         {key.friendlyName}
+                      </TableCell>
+                      <TableCell>
+                        {key.autoDisabledAt ? (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                            Limit hit
+                          </Badge>
+                        ) : key.status === "Active" ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/50 text-emerald-600">
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            Paused
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Tooltip>
@@ -362,11 +396,6 @@ export function KeyManager() {
                             {key.dailySpendLimit === "none" ? "—" : `$${key.dailySpendLimit}`}
                           </span>
                         )}
-                        {key.autoDisabledAt && (
-                          <Badge variant="destructive" className="ml-1 text-[10px] px-1 py-0">
-                            limit hit
-                          </Badge>
-                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                         {(() => {
@@ -388,23 +417,45 @@ export function KeyManager() {
                       </TableCell>
                       <TableCell>
                         {(isAdmin || key.createdBy === session?.user?.email) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() =>
-                              setDeleteTarget({
-                                userName: key.userName,
-                                credentialId: key.credentialId,
-                                friendlyName: key.friendlyName,
-                              })
-                            }
-                            disabled={deleting === key.credentialId}
-                          >
-                            {deleting === key.credentialId
-                              ? "Deleting..."
-                              : "Delete"}
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Tooltip>
+                              <TooltipTrigger className="inline-flex">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => handleToggle(key)}
+                                  disabled={toggling === key.credentialId}
+                                >
+                                  {key.status === "Active" ? (
+                                    <PauseIcon className="size-3.5" />
+                                  ) : (
+                                    <PlayIcon className="size-3.5" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {key.status === "Active" ? "Pause key" : "Resume key"}
+                              </TooltipContent>
+                            </Tooltip>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  userName: key.userName,
+                                  credentialId: key.credentialId,
+                                  friendlyName: key.friendlyName,
+                                })
+                              }
+                              disabled={deleting === key.credentialId}
+                            >
+                              {deleting === key.credentialId
+                                ? "Deleting..."
+                                : "Delete"}
+                            </Button>
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>
@@ -417,6 +468,7 @@ export function KeyManager() {
                     return (
                       <TableRow className="text-muted-foreground/70 italic">
                         <TableCell className="whitespace-nowrap">Deleted keys</TableCell>
+                        <TableCell />
                         <TableCell />
                         <TableCell />
                         <TableCell />
