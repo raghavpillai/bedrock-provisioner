@@ -385,7 +385,7 @@ export function KeyManager() {
                               if (e.key === "Escape") setEditingLimit(null);
                             }}
                           />
-                        ) : (
+                        ) : (isAdmin || key.createdBy === session?.user?.email) ? (
                           <span
                             className="text-xs font-mono cursor-pointer hover:underline"
                             onClick={() => {
@@ -393,6 +393,10 @@ export function KeyManager() {
                               setLimitValue(key.dailySpendLimit === "none" ? "" : key.dailySpendLimit);
                             }}
                           >
+                            {key.dailySpendLimit === "none" ? "—" : `$${key.dailySpendLimit}`}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-mono">
                             {key.dailySpendLimit === "none" ? "—" : `$${key.dailySpendLimit}`}
                           </span>
                         )}
