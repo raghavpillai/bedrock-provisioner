@@ -1,17 +1,17 @@
-// Bedrock on-demand pricing per 1M tokens (us-east-1)
-// Source: https://aws.amazon.com/bedrock/pricing/
+// Bedrock pricing per 1M tokens (from Anthropic official docs, verified 2026-04-03)
+// Source: https://platform.claude.com/docs/en/about-claude/pricing
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  // Claude
+  // Claude — newest first for substring matching priority
+  "claude-opus-4-6": { input: 5.0, output: 25.0 },
+  "claude-opus-4-5": { input: 5.0, output: 25.0 },
+  "claude-opus-4-1": { input: 15.0, output: 75.0 },
+  "claude-opus-4": { input: 15.0, output: 75.0 },
   "claude-sonnet-4-6": { input: 3.0, output: 15.0 },
   "claude-sonnet-4-5": { input: 3.0, output: 15.0 },
   "claude-sonnet-4": { input: 3.0, output: 15.0 },
-  "claude-opus-4-6": { input: 15.0, output: 75.0 },
-  "claude-opus-4-5": { input: 15.0, output: 75.0 },
-  "claude-opus-4-1": { input: 15.0, output: 75.0 },
-  "claude-opus-4": { input: 15.0, output: 75.0 },
-  "claude-haiku-4-5": { input: 0.8, output: 4.0 },
   "claude-3-7-sonnet": { input: 3.0, output: 15.0 },
   "claude-3-5-sonnet": { input: 3.0, output: 15.0 },
+  "claude-haiku-4-5": { input: 1.0, output: 5.0 },
   "claude-3-5-haiku": { input: 0.8, output: 4.0 },
   "claude-3-haiku": { input: 0.25, output: 1.25 },
   "claude-3-sonnet": { input: 3.0, output: 15.0 },
@@ -39,17 +39,23 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   "command-r": { input: 0.15, output: 0.6 },
 };
 
-// Default blended rate for unknown models
+// Default rate for unknown models (Sonnet-class)
 const DEFAULT_PRICING = { input: 3.0, output: 15.0 };
 
+// Cache pricing multipliers (5-min TTL — standard for Claude Code on Bedrock)
+const CACHE_READ_MULTIPLIER = 0.10;
+const CACHE_WRITE_MULTIPLIER = 1.25;
+
 /**
- * Calculate estimated cost for a model invocation.
+ * Calculate cost for a model invocation including cache tokens.
  * Matches model key against known pricing using substring matching.
  */
 export function calculateCost(
   modelKey: string,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
+  cacheReadTokens: number = 0,
+  cacheWriteTokens: number = 0,
 ): number {
   const key = modelKey.toLowerCase();
   const pricing =
@@ -57,6 +63,8 @@ export function calculateCost(
     DEFAULT_PRICING;
   return (
     (inputTokens / 1_000_000) * pricing.input +
-    (outputTokens / 1_000_000) * pricing.output
+    (outputTokens / 1_000_000) * pricing.output +
+    (cacheReadTokens / 1_000_000) * pricing.input * CACHE_READ_MULTIPLIER +
+    (cacheWriteTokens / 1_000_000) * pricing.input * CACHE_WRITE_MULTIPLIER
   );
 }
