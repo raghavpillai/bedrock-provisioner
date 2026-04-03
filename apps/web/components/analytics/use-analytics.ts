@@ -1,30 +1,77 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRegion } from "@/lib/region-context";
 
-export type DailyData = {
-  day: string;
-  groupKey: string;
+// --- Types matching two-dimensional API response ---
+
+export type AnalyticsRow = {
+  userKey: string;
+  modelKey: string;
   totalIn: number;
   totalOut: number;
+  cacheRead: number;
+  cacheWrite: number;
   invocations: number;
 };
 
-export type SummaryData = {
-  groupKey: string;
-  totalIn: number;
-  totalOut: number;
-  invocations: number;
-};
+export type DailyRow = AnalyticsRow & { day: string };
 
 export type AnalyticsData = {
-  daily: DailyData[];
-  summary: SummaryData[];
+  daily: DailyRow[];
+  summary: AnalyticsRow[];
   period: { year: number; month: number; startTime: string; endTime: string };
   error?: string;
 };
 
+// Keep old type aliases for backwards compat
+export type DailyData = DailyRow;
+export type SummaryData = AnalyticsRow;
+
 // Re-export centralized pricing
 export { calculateCost, calculateCost as getModelCost } from "@rockbed/shared";
+
+// --- Aggregation helpers ---
+
+/** Aggregate rows by a key field, summing numeric columns */
+function aggregateBy(rows: AnalyticsRow[], keyFn: (r: AnalyticsRow) => string): AnalyticsRow[] {
+  const map = new Map<string, AnalyticsRow>();
+  for (const r of rows) {
+    const key = keyFn(r);
+    const existing = map.get(key);
+    if (existing) {
+      existing.totalIn += r.totalIn;
+      existing.totalOut += r.totalOut;
+      existing.cacheRead += r.cacheRead;
+      existing.cacheWrite += r.cacheWrite;
+      existing.invocations += r.invocations;
+    } else {
+      map.set(key, { ...r });
+    }
+  }
+  return Array.from(map.values());
+}
+
+/** Aggregate summary rows by model (sum across users) */
+export function aggregateByModel(rows: AnalyticsRow[]): AnalyticsRow[] {
+  return aggregateBy(rows, (r) => r.modelKey).map((r) => ({
+    ...r,
+    userKey: "__all__",
+  }));
+}
+
+/** Aggregate summary rows by user (sum across models) */
+export function aggregateByUser(rows: AnalyticsRow[]): AnalyticsRow[] {
+  return aggregateBy(rows, (r) => r.userKey).map((r) => ({
+    ...r,
+    modelKey: "__all__",
+  }));
+}
+
+/** Get per-model breakdown for a specific user */
+export function modelsForUser(rows: AnalyticsRow[], userKey: string): AnalyticsRow[] {
+  return rows.filter((r) => r.userKey === userKey);
+}
+
+// --- Hook ---
 
 export type AnalyticsFilters = {
   apiKey?: string;
@@ -41,9 +88,10 @@ export function useAnalytics(
   const { region } = useRegion();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    setLoading(true);
+  const doFetch = useCallback((showLoading = true) => {
+    if (showLoading) setLoading(true);
     const params = new URLSearchParams({
       region,
       groupBy,
@@ -61,8 +109,16 @@ export function useAnalytics(
       .finally(() => setLoading(false));
   }, [region, groupBy, year, month, filters?.apiKey, filters?.model, filters?.user]);
 
+  useEffect(() => {
+    doFetch(true);
+    intervalRef.current = setInterval(() => doFetch(false), 5 * 60 * 1000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [doFetch]);
+
   return { data, loading };
 }
+
+// --- Formatting ---
 
 export function formatNumber(n: number): string {
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
