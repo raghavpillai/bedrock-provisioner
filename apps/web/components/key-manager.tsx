@@ -42,12 +42,26 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatNumber } from "@/components/analytics/use-analytics";
+
+type ModelStats = { totalIn: number; totalOut: number; cacheRead: number; cacheWrite: number; invocations: number };
 
 type KeyStats = Record<string, {
   mtdIn: number; mtdOut: number; mtdInv: number;
   recentIn: number; recentOut: number; recentInv: number;
+  mtdCacheRead: number; mtdCacheWrite: number;
+  recentCacheRead: number; recentCacheWrite: number;
   lastUsed: string | null;
+  models: Record<string, ModelStats>;
 }>;
+
+function perModelCost(models: Record<string, ModelStats> | undefined): number {
+  if (!models) return 0;
+  return Object.entries(models).reduce(
+    (acc, [model, m]) => acc + calculateCost(model, m.totalIn, m.totalOut, m.cacheRead, m.cacheWrite),
+    0,
+  );
+}
 
 export function KeyManager() {
   const { region } = useRegion();
@@ -71,6 +85,19 @@ export function KeyManager() {
   const [createCustomDays, setCreateCustomDays] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [editingLimit, setEditingLimit] = useState<string | null>(null);
+  const [limitValue, setLimitValue] = useState("");
+
+  async function saveLimit(key: BedrockKey) {
+    const val = limitValue.trim();
+    const limit = val === "" || val === "none" ? "none" as const : parseFloat(val);
+    if (typeof limit === "number" && (isNaN(limit) || limit <= 0)) return;
+    try {
+      await client.keys.setDailyLimit({ region, userName: key.userName, limit });
+      setEditingLimit(null);
+      await refresh();
+    } catch {}
+  }
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -85,10 +112,8 @@ export function KeyManager() {
     }
   }, [region]);
 
-  // Stable key identity string to avoid re-fetching stats on every render
   const keysFingerprint = keys.map((k) => `${k.friendlyName}:${k.createdAt}`).join(",");
 
-  // Fetch per-key usage stats (scoped to active key creation dates)
   useEffect(() => {
     if (keys.length === 0 && refreshing) return;
     const activeKeys: Record<string, string> = {};
@@ -232,7 +257,7 @@ export function KeyManager() {
         </CardHeader>
         <CardContent>
           {refreshing && keys.length === 0 ? (
-            <TableRowsSkeleton cols={6} rows={3} />
+            <TableRowsSkeleton cols={8} rows={3} />
           ) : keys.length === 0 ? (
             <div className="py-8 text-center space-y-3">
               <p className="text-sm text-muted-foreground">No API keys yet.</p>
@@ -251,6 +276,9 @@ export function KeyManager() {
                     <TableHead>Created by</TableHead>
                     <TableHead className="text-right">This month</TableHead>
                     <TableHead className="text-right">Lifetime</TableHead>
+                    <TableHead className="text-right">Cache read</TableHead>
+                    <TableHead className="text-right">Cache write</TableHead>
+                    <TableHead className="text-right">Daily limit</TableHead>
                     <TableHead>Last used</TableHead>
                     <TableHead className="w-16" />
                   </TableRow>
@@ -283,7 +311,7 @@ export function KeyManager() {
                         {(() => {
                           const s = keyStats[key.friendlyName];
                           if (!s || !s.mtdInv) return <span className="text-muted-foreground text-xs">—</span>;
-                          const cost = calculateCost("blended", s.mtdIn, s.mtdOut);
+                          const cost = perModelCost(s.models);
                           return <span className="text-xs font-mono">${cost.toFixed(2)}</span>;
                         })()}
                       </TableCell>
@@ -291,10 +319,56 @@ export function KeyManager() {
                         {(() => {
                           const s = keyStats[key.friendlyName];
                           if (!s || !s.recentInv) return <span className="text-muted-foreground text-xs">—</span>;
-                          // recentInv now holds lifetime data from the 90-day query
-                          const cost = calculateCost("blended", s.recentIn, s.recentOut);
+                          const cost = perModelCost(s.models);
                           return <span className="text-xs font-mono">${cost.toFixed(2)}</span>;
                         })()}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {(() => {
+                          const s = keyStats[key.friendlyName];
+                          if (!s || !s.mtdCacheRead) return <span className="text-muted-foreground text-xs">—</span>;
+                          return <span className="text-xs font-mono">{formatNumber(s.mtdCacheRead)}</span>;
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {(() => {
+                          const s = keyStats[key.friendlyName];
+                          if (!s || !s.mtdCacheWrite) return <span className="text-muted-foreground text-xs">—</span>;
+                          return <span className="text-xs font-mono">{formatNumber(s.mtdCacheWrite)}</span>;
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {editingLimit === key.userName ? (
+                          <form
+                            className="flex items-center gap-1 justify-end"
+                            onSubmit={(e) => { e.preventDefault(); saveLimit(key); }}
+                          >
+                            <Input
+                              className="h-6 w-20 text-xs text-right"
+                              value={limitValue}
+                              onChange={(e) => setLimitValue(e.target.value)}
+                              placeholder="none"
+                              autoFocus
+                              onBlur={() => setEditingLimit(null)}
+                              onKeyDown={(e) => { if (e.key === "Escape") setEditingLimit(null); }}
+                            />
+                          </form>
+                        ) : (
+                          <span
+                            className="text-xs font-mono cursor-pointer hover:underline"
+                            onClick={() => {
+                              setEditingLimit(key.userName);
+                              setLimitValue(key.dailySpendLimit === "none" ? "" : key.dailySpendLimit);
+                            }}
+                          >
+                            {key.dailySpendLimit === "none" ? "—" : `$${key.dailySpendLimit}`}
+                          </span>
+                        )}
+                        {key.autoDisabledAt && (
+                          <Badge variant="destructive" className="ml-1 text-[10px] px-1 py-0">
+                            limit hit
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                         {(() => {
@@ -339,8 +413,8 @@ export function KeyManager() {
                   ))}
                   {keyStats["__unattributed__"] && (() => {
                     const s = keyStats["__unattributed__"];
-                    const mtdCost = s.mtdInv ? calculateCost("blended", s.mtdIn, s.mtdOut) : 0;
-                    const lifetimeCost = s.recentInv ? calculateCost("blended", s.recentIn, s.recentOut) : 0;
+                    const mtdCost = s.mtdInv ? perModelCost(s.models) : 0;
+                    const lifetimeCost = s.recentInv ? perModelCost(s.models) : 0;
                     if (!mtdCost && !lifetimeCost) return null;
                     return (
                       <TableRow className="text-muted-foreground/70 italic">
@@ -354,6 +428,13 @@ export function KeyManager() {
                         <TableCell className="text-right text-xs font-mono">
                           {lifetimeCost ? `$${lifetimeCost.toFixed(2)}` : "—"}
                         </TableCell>
+                        <TableCell className="text-right text-xs font-mono">
+                          {s.mtdCacheRead ? formatNumber(s.mtdCacheRead) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-mono">
+                          {s.mtdCacheWrite ? formatNumber(s.mtdCacheWrite) : "—"}
+                        </TableCell>
+                        <TableCell />
                         <TableCell />
                         <TableCell />
                       </TableRow>
@@ -476,4 +557,3 @@ export function KeyManager() {
     </div>
   );
 }
-

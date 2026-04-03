@@ -20,6 +20,8 @@ export type BedrockKey = {
   createdAt: string;
   expiresAt: string | null;
   createdBy: string | null;
+  dailySpendLimit: string;
+  autoDisabledAt: string | null;
 };
 
 export type NewBedrockKey = {
