@@ -85,6 +85,9 @@ export function KeyManager() {
     }
   }, [region]);
 
+  // Stable key identity string to avoid re-fetching stats on every render
+  const keysFingerprint = keys.map((k) => `${k.friendlyName}:${k.createdAt}`).join(",");
+
   // Fetch per-key usage stats (scoped to active key creation dates)
   useEffect(() => {
     if (keys.length === 0 && refreshing) return;
@@ -100,7 +103,8 @@ export function KeyManager() {
       .then((r) => r.json())
       .then(setKeyStats)
       .catch(() => {});
-  }, [region, keys, refreshing]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [region, keysFingerprint, refreshing]);
 
   useEffect(() => {
     refresh();

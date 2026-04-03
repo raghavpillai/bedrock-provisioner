@@ -11,9 +11,10 @@ export async function GET(req: NextRequest) {
   const region = req.nextUrl.searchParams.get("region") ?? "us-east-1";
   // activeKeys: JSON map of { "key-name": "2026-01-15T00:00:00.000Z", ... }
   const activeKeysParam = req.nextUrl.searchParams.get("activeKeys");
-  const activeKeys: Record<string, string> = activeKeysParam
-    ? JSON.parse(activeKeysParam)
-    : {};
+  let activeKeys: Record<string, string> = {};
+  if (activeKeysParam) {
+    try { activeKeys = JSON.parse(activeKeysParam); } catch { /* ignore malformed */ }
+  }
 
   const cwl = new CloudWatchLogsClient({ region });
   const now = new Date();
@@ -97,7 +98,7 @@ export async function GET(req: NextRequest) {
         keysNeedingRequery.push({
           name,
           createdAt,
-          arn: `bedrock-key-${name}`,
+          arn: `bedrock-key-${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
         });
       }
     }

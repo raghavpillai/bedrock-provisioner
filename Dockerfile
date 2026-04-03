@@ -1,4 +1,4 @@
-FROM oven/bun:1.3 AS base
+FROM oven/bun:1.3.9 AS base
 WORKDIR /app
 
 # Install dependencies
@@ -9,7 +9,7 @@ COPY apps/api/package.json apps/api/
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
 COPY packages/db/prisma/schema.prisma packages/db/prisma/
-RUN bun install
+RUN bun install --frozen-lockfile
 RUN cd packages/db && bunx prisma generate
 
 # Build
@@ -21,7 +21,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN cd apps/web && bun run build
 
 # Production
-FROM oven/bun:1.3 AS runner
+FROM oven/bun:1.3.9 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
