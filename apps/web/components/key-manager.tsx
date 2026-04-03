@@ -339,20 +339,18 @@ export function KeyManager() {
                       </TableCell>
                       <TableCell className="text-right text-sm">
                         {editingLimit === key.userName ? (
-                          <form
-                            className="flex items-center gap-1 justify-end"
-                            onSubmit={(e) => { e.preventDefault(); saveLimit(key); }}
-                          >
-                            <Input
-                              className="h-6 w-20 text-xs text-right"
-                              value={limitValue}
-                              onChange={(e) => setLimitValue(e.target.value)}
-                              placeholder="none"
-                              autoFocus
-                              onBlur={() => setEditingLimit(null)}
-                              onKeyDown={(e) => { if (e.key === "Escape") setEditingLimit(null); }}
-                            />
-                          </form>
+                          <Input
+                            className="h-6 w-20 text-xs text-right ml-auto"
+                            value={limitValue}
+                            onChange={(e) => setLimitValue(e.target.value)}
+                            placeholder="none"
+                            autoFocus
+                            onBlur={() => saveLimit(key)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); saveLimit(key); }
+                              if (e.key === "Escape") setEditingLimit(null);
+                            }}
+                          />
                         ) : (
                           <span
                             className="text-xs font-mono cursor-pointer hover:underline"
