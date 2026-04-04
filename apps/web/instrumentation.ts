@@ -38,6 +38,41 @@ async function enforceDailyLimits() {
           const tags = tagsRes.Tags ?? [];
           const limitStr = tags.find((t) => t.Key === "rockbed:dailySpendLimit")?.Value;
 
+          const autoDisabledAt = tags.find((t) => t.Key === "rockbed:autoDisabledAt")?.Value;
+
+          // Re-enable keys that were auto-disabled on a previous day
+          if (autoDisabledAt && autoDisabledAt !== "") {
+            const disabledDate = new Date(autoDisabledAt);
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            if (disabledDate < today) {
+              const credsRes = await iam.send(
+                new ListServiceSpecificCredentialsCommand({
+                  UserName: user.UserName!,
+                  ServiceName: BEDROCK_SERVICE_NAME,
+                })
+              );
+              for (const cred of credsRes.ServiceSpecificCredentials ?? []) {
+                if (cred.Status === "Inactive") {
+                  await iam.send(
+                    new UpdateServiceSpecificCredentialCommand({
+                      UserName: user.UserName!,
+                      ServiceSpecificCredentialId: cred.ServiceSpecificCredentialId!,
+                      Status: "Active",
+                    })
+                  );
+                }
+              }
+              await iam.send(
+                new TagUserCommand({
+                  UserName: user.UserName!,
+                  Tags: [{ Key: "rockbed:autoDisabledAt", Value: "" }],
+                })
+              );
+              console.log(`[spend-limit] Re-enabled ${user.UserName} — new day`);
+            }
+          }
+
           if (!limitStr || limitStr === "none" || limitStr === "") continue;
 
           const limit = parseFloat(limitStr);
