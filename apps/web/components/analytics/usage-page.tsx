@@ -9,7 +9,10 @@ import {
   monthName,
   CHART_COLORS,
   sanitizeKey,
+  aggregateByModel,
+  aggregateByUser,
   type AnalyticsFilters,
+  type AnalyticsRow,
 } from "./use-analytics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -60,11 +63,13 @@ export function UsagePage() {
     else setMonth(month + 1);
   }
 
-  // Build chart data: pivot daily data into { day, key1: val, key2: val, ... }
+  const getGroupKey = (r: AnalyticsRow) =>
+    groupBy === "model" ? r.modelKey : r.userKey;
+
   const { chartData, chartConfig, groupKeys } = useMemo(() => {
     if (!data?.daily.length) return { chartData: [], chartConfig: {}, groupKeys: [] };
 
-    const rawKeys = [...new Set(data.daily.map((d) => d.groupKey))];
+    const rawKeys = [...new Set(data.daily.map((d) => getGroupKey(d)))];
     const keyMap = new Map(rawKeys.map((k) => [k, sanitizeKey(k)]));
     const safeKeys = rawKeys.map((k) => keyMap.get(k)!);
 
@@ -73,7 +78,8 @@ export function UsagePage() {
       const dayKey = new Date(row.day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
       if (!byDay.has(dayKey)) byDay.set(dayKey, { day: dayKey as any });
       const entry = byDay.get(dayKey)!;
-      const safe = keyMap.get(row.groupKey) ?? row.groupKey;
+      const gk = getGroupKey(row);
+      const safe = keyMap.get(gk) ?? gk;
       entry[safe] = (entry[safe] ?? 0) + row.totalIn + row.totalOut;
     }
 
@@ -87,18 +93,20 @@ export function UsagePage() {
       chartConfig: config,
       groupKeys: safeKeys,
     };
-  }, [data]);
+  }, [data, groupBy]);
 
   // Totals
   const totals = useMemo(() => {
-    if (!data?.summary.length) return { totalIn: 0, totalOut: 0, invocations: 0 };
+    if (!data?.summary.length) return { totalIn: 0, totalOut: 0, cacheRead: 0, cacheWrite: 0, invocations: 0 };
     return data.summary.reduce(
       (acc, r) => ({
         totalIn: acc.totalIn + r.totalIn,
         totalOut: acc.totalOut + r.totalOut,
+        cacheRead: acc.cacheRead + r.cacheRead,
+        cacheWrite: acc.cacheWrite + r.cacheWrite,
         invocations: acc.invocations + r.invocations,
       }),
-      { totalIn: 0, totalOut: 0, invocations: 0 }
+      { totalIn: 0, totalOut: 0, cacheRead: 0, cacheWrite: 0, invocations: 0 }
     );
   }, [data]);
 
@@ -152,7 +160,7 @@ export function UsagePage() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-4 pb-4">
             <p className="text-sm text-muted-foreground">Total tokens in</p>
@@ -170,6 +178,26 @@ export function UsagePage() {
               <Skeleton className="h-8 w-40 mt-1" />
             ) : (
               <p className="text-2xl font-bold mt-1">{formatNumber(totals.totalOut)}</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <p className="text-sm text-muted-foreground">Cache read tokens</p>
+            {loading ? (
+              <Skeleton className="h-8 w-40 mt-1" />
+            ) : (
+              <p className="text-2xl font-bold mt-1">{formatNumber(totals.cacheRead)}</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <p className="text-sm text-muted-foreground">Cache write tokens</p>
+            {loading ? (
+              <Skeleton className="h-8 w-40 mt-1" />
+            ) : (
+              <p className="text-2xl font-bold mt-1">{formatNumber(totals.cacheWrite)}</p>
             )}
           </CardContent>
         </Card>
@@ -263,15 +291,19 @@ export function UsagePage() {
                     </th>
                     <th className="text-right p-3 font-medium text-muted-foreground">Tokens in</th>
                     <th className="text-right p-3 font-medium text-muted-foreground">Tokens out</th>
+                    <th className="text-right p-3 font-medium text-muted-foreground">Cache read</th>
+                    <th className="text-right p-3 font-medium text-muted-foreground">Cache write</th>
                     <th className="text-right p-3 font-medium text-muted-foreground">Invocations</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.summary.map((row, i) => (
-                    <tr key={`${row.groupKey}-${i}`} className="border-b last:border-0">
-                      <td className="p-3 font-medium">{row.groupKey}</td>
+                  {(groupBy === "model" ? aggregateByModel(data.summary) : aggregateByUser(data.summary)).map((row, i) => (
+                    <tr key={`${getGroupKey(row)}-${i}`} className="border-b last:border-0">
+                      <td className="p-3 font-medium">{getGroupKey(row)}</td>
                       <td className="p-3 text-right font-mono">{formatNumber(row.totalIn)}</td>
                       <td className="p-3 text-right font-mono">{formatNumber(row.totalOut)}</td>
+                      <td className="p-3 text-right font-mono">{formatNumber(row.cacheRead)}</td>
+                      <td className="p-3 text-right font-mono">{formatNumber(row.cacheWrite)}</td>
                       <td className="p-3 text-right font-mono">{formatNumber(row.invocations)}</td>
                     </tr>
                   ))}

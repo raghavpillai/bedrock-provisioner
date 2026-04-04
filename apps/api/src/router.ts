@@ -7,6 +7,7 @@ import {
   CreateServiceSpecificCredentialCommand,
   ListServiceSpecificCredentialsCommand,
   DeleteServiceSpecificCredentialCommand,
+  UpdateServiceSpecificCredentialCommand,
   ListUsersCommand,
   DetachUserPolicyCommand,
   DeleteUserCommand,
@@ -132,6 +133,7 @@ const createKey = os.input(CreateKeyInput).handler(async ({ input }) => {
         { Key: "rockbed:expiryDays", Value: String(input.expiryDays) },
         { Key: "rockbed:expiresAt", Value: expiresAt ?? "never" },
         { Key: "rockbed:createdBy", Value: input.createdBy ?? "unknown" },
+        { Key: "rockbed:dailySpendLimit", Value: "100" },
       ],
     })
   );
@@ -186,6 +188,10 @@ const listKeys = os.input(RegionInput).handler(async ({ input }) => {
         tags.find((t) => t.Key === "rockbed:expiresAt")?.Value;
       const createdBy =
         tags.find((t) => t.Key === "rockbed:createdBy")?.Value;
+      const dailySpendLimit =
+        tags.find((t) => t.Key === "rockbed:dailySpendLimit")?.Value;
+      const autoDisabledAt =
+        tags.find((t) => t.Key === "rockbed:autoDisabledAt")?.Value;
 
       return (credsRes.ServiceSpecificCredentials ?? []).map((cred) => ({
         userName: user.UserName!,
@@ -196,6 +202,8 @@ const listKeys = os.input(RegionInput).handler(async ({ input }) => {
         createdAt: cred.CreateDate!.toISOString(),
         expiresAt: expiresAt && expiresAt !== "never" ? expiresAt : null,
         createdBy: createdBy && createdBy !== "unknown" ? createdBy : null,
+        dailySpendLimit: dailySpendLimit ?? "none",
+        autoDisabledAt: autoDisabledAt ?? null,
       }));
     })
   );
@@ -462,6 +470,50 @@ const enableInvocationLogging = os
     return { ok: true, enabled: true };
   });
 
+const setDailyLimit = os
+  .input(z.object({
+    region: z.string(),
+    userName: z.string(),
+    limit: z.union([z.number().positive(), z.literal("none")]),
+  }))
+  .handler(async ({ input }) => {
+    const { iam } = createClients(input.region);
+    await iam.send(
+      new TagUserCommand({
+        UserName: input.userName,
+        Tags: [{ Key: "rockbed:dailySpendLimit", Value: String(input.limit) }],
+      })
+    );
+    return { success: true };
+  });
+
+const toggleKey = os
+  .input(z.object({
+    region: z.string(),
+    userName: z.string(),
+    credentialId: z.string(),
+    active: z.boolean(),
+  }))
+  .handler(async ({ input }) => {
+    const { iam } = createClients(input.region);
+    await iam.send(
+      new UpdateServiceSpecificCredentialCommand({
+        UserName: input.userName,
+        ServiceSpecificCredentialId: input.credentialId,
+        Status: input.active ? "Active" : "Inactive",
+      })
+    );
+    if (input.active) {
+      await iam.send(
+        new TagUserCommand({
+          UserName: input.userName,
+          Tags: [{ Key: "rockbed:autoDisabledAt", Value: "" }],
+        })
+      );
+    }
+    return { success: true };
+  });
+
 // -- Router --
 
 export const router = {
@@ -475,6 +527,8 @@ export const router = {
     create: createKey,
     list: listKeys,
     delete: deleteKey,
+    setDailyLimit,
+    toggle: toggleKey,
   },
   quotas: {
     list: listQuotas,

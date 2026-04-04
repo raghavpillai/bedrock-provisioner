@@ -6,7 +6,7 @@ import { useRegion } from "@/lib/region-context";
 import { useSession } from "@/lib/auth-client";
 import { EXPIRY_PRESETS, calculateCost } from "@rockbed/shared";
 import { CopyButton } from "@/components/shared/copy-button";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, PauseIcon, PlayIcon } from "lucide-react";
 import type { BedrockKey, NewBedrockKey } from "@rockbed/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,12 +42,26 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatNumber } from "@/components/analytics/use-analytics";
+
+type ModelStats = { totalIn: number; totalOut: number; cacheRead: number; cacheWrite: number; invocations: number };
 
 type KeyStats = Record<string, {
   mtdIn: number; mtdOut: number; mtdInv: number;
   recentIn: number; recentOut: number; recentInv: number;
+  mtdCacheRead: number; mtdCacheWrite: number;
+  recentCacheRead: number; recentCacheWrite: number;
   lastUsed: string | null;
+  models: Record<string, ModelStats>;
 }>;
+
+function perModelCost(models: Record<string, ModelStats> | undefined): number {
+  if (!models) return 0;
+  return Object.entries(models).reduce(
+    (acc, [model, m]) => acc + calculateCost(model, m.totalIn, m.totalOut, m.cacheRead, m.cacheWrite),
+    0,
+  );
+}
 
 export function KeyManager() {
   const { region } = useRegion();
@@ -71,6 +85,37 @@ export function KeyManager() {
   const [createCustomDays, setCreateCustomDays] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [editingLimit, setEditingLimit] = useState<string | null>(null);
+  const [limitValue, setLimitValue] = useState("");
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  async function saveLimit(key: BedrockKey) {
+    const val = limitValue.trim();
+    const limit = val === "" || val === "none" ? "none" as const : parseFloat(val);
+    if (typeof limit === "number" && (isNaN(limit) || limit <= 0)) return;
+    try {
+      await client.keys.setDailyLimit({ region, userName: key.userName, limit });
+      setEditingLimit(null);
+      await refresh();
+    } catch {}
+  }
+
+  async function handleToggle(key: BedrockKey) {
+    setToggling(key.credentialId);
+    try {
+      await client.keys.toggle({
+        region,
+        userName: key.userName,
+        credentialId: key.credentialId,
+        active: key.status !== "Active",
+      });
+      await refresh();
+    } catch (err: any) {
+      setError(err.message ?? "Failed to toggle key");
+    } finally {
+      setToggling(null);
+    }
+  }
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -85,10 +130,8 @@ export function KeyManager() {
     }
   }, [region]);
 
-  // Stable key identity string to avoid re-fetching stats on every render
   const keysFingerprint = keys.map((k) => `${k.friendlyName}:${k.createdAt}`).join(",");
 
-  // Fetch per-key usage stats (scoped to active key creation dates)
   useEffect(() => {
     if (keys.length === 0 && refreshing) return;
     const activeKeys: Record<string, string> = {};
@@ -232,7 +275,7 @@ export function KeyManager() {
         </CardHeader>
         <CardContent>
           {refreshing && keys.length === 0 ? (
-            <TableRowsSkeleton cols={6} rows={3} />
+            <TableRowsSkeleton cols={8} rows={3} />
           ) : keys.length === 0 ? (
             <div className="py-8 text-center space-y-3">
               <p className="text-sm text-muted-foreground">No API keys yet.</p>
@@ -246,11 +289,15 @@ export function KeyManager() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>API key ID</TableHead>
                     <TableHead>Created</TableHead>
                     <TableHead>Created by</TableHead>
                     <TableHead className="text-right">This month</TableHead>
                     <TableHead className="text-right">Lifetime</TableHead>
+                    <TableHead className="text-right">Cache read</TableHead>
+                    <TableHead className="text-right">Cache write</TableHead>
+                    <TableHead className="text-right">Daily limit</TableHead>
                     <TableHead>Last used</TableHead>
                     <TableHead className="w-16" />
                   </TableRow>
@@ -260,6 +307,21 @@ export function KeyManager() {
                     <TableRow key={key.credentialId}>
                       <TableCell className="font-medium whitespace-nowrap">
                         {key.friendlyName}
+                      </TableCell>
+                      <TableCell>
+                        {key.autoDisabledAt ? (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                            Limit hit
+                          </Badge>
+                        ) : key.status === "Active" ? (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-emerald-500/50 text-emerald-600">
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            Paused
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Tooltip>
@@ -283,7 +345,7 @@ export function KeyManager() {
                         {(() => {
                           const s = keyStats[key.friendlyName];
                           if (!s || !s.mtdInv) return <span className="text-muted-foreground text-xs">—</span>;
-                          const cost = calculateCost("blended", s.mtdIn, s.mtdOut);
+                          const cost = perModelCost(s.models);
                           return <span className="text-xs font-mono">${cost.toFixed(2)}</span>;
                         })()}
                       </TableCell>
@@ -291,10 +353,53 @@ export function KeyManager() {
                         {(() => {
                           const s = keyStats[key.friendlyName];
                           if (!s || !s.recentInv) return <span className="text-muted-foreground text-xs">—</span>;
-                          // recentInv now holds lifetime data from the 90-day query
-                          const cost = calculateCost("blended", s.recentIn, s.recentOut);
+                          const cost = perModelCost(s.models);
                           return <span className="text-xs font-mono">${cost.toFixed(2)}</span>;
                         })()}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {(() => {
+                          const s = keyStats[key.friendlyName];
+                          if (!s || !s.mtdCacheRead) return <span className="text-muted-foreground text-xs">—</span>;
+                          return <span className="text-xs font-mono">{formatNumber(s.mtdCacheRead)}</span>;
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {(() => {
+                          const s = keyStats[key.friendlyName];
+                          if (!s || !s.mtdCacheWrite) return <span className="text-muted-foreground text-xs">—</span>;
+                          return <span className="text-xs font-mono">{formatNumber(s.mtdCacheWrite)}</span>;
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {editingLimit === key.userName ? (
+                          <Input
+                            className="h-6 w-20 text-xs text-right ml-auto"
+                            value={limitValue}
+                            onChange={(e) => setLimitValue(e.target.value)}
+                            placeholder="none"
+                            autoFocus
+                            onBlur={() => saveLimit(key)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); saveLimit(key); }
+                              if (e.key === "Escape") setEditingLimit(null);
+                            }}
+                          />
+                        ) : (isAdmin || key.createdBy === session?.user?.email) ? (
+                          <span
+                            className="text-xs font-mono cursor-pointer hover:underline"
+                            onClick={() => {
+                              setEditingLimit(key.userName);
+                              setLimitValue(key.dailySpendLimit === "none" ? "" : key.dailySpendLimit);
+                            }}
+                          >
+                            {key.dailySpendLimit === "none" ? "—" : `$${key.dailySpendLimit}`}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-mono">
+                            {key.dailySpendLimit === "none" ? "—" : `$${key.dailySpendLimit}`}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                         {(() => {
@@ -316,35 +421,58 @@ export function KeyManager() {
                       </TableCell>
                       <TableCell>
                         {(isAdmin || key.createdBy === session?.user?.email) && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() =>
-                              setDeleteTarget({
-                                userName: key.userName,
-                                credentialId: key.credentialId,
-                                friendlyName: key.friendlyName,
-                              })
-                            }
-                            disabled={deleting === key.credentialId}
-                          >
-                            {deleting === key.credentialId
-                              ? "Deleting..."
-                              : "Delete"}
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Tooltip>
+                              <TooltipTrigger className="inline-flex">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() => handleToggle(key)}
+                                  disabled={toggling === key.credentialId}
+                                >
+                                  {key.status === "Active" ? (
+                                    <PauseIcon className="size-3.5" />
+                                  ) : (
+                                    <PlayIcon className="size-3.5" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {key.status === "Active" ? "Pause key" : "Resume key"}
+                              </TooltipContent>
+                            </Tooltip>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  userName: key.userName,
+                                  credentialId: key.credentialId,
+                                  friendlyName: key.friendlyName,
+                                })
+                              }
+                              disabled={deleting === key.credentialId}
+                            >
+                              {deleting === key.credentialId
+                                ? "Deleting..."
+                                : "Delete"}
+                            </Button>
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>
                   ))}
                   {keyStats["__unattributed__"] && (() => {
                     const s = keyStats["__unattributed__"];
-                    const mtdCost = s.mtdInv ? calculateCost("blended", s.mtdIn, s.mtdOut) : 0;
-                    const lifetimeCost = s.recentInv ? calculateCost("blended", s.recentIn, s.recentOut) : 0;
+                    const mtdCost = s.mtdInv ? perModelCost(s.models) : 0;
+                    const lifetimeCost = s.recentInv ? perModelCost(s.models) : 0;
                     if (!mtdCost && !lifetimeCost) return null;
                     return (
                       <TableRow className="text-muted-foreground/70 italic">
                         <TableCell className="whitespace-nowrap">Deleted keys</TableCell>
+                        <TableCell />
                         <TableCell />
                         <TableCell />
                         <TableCell />
@@ -354,6 +482,13 @@ export function KeyManager() {
                         <TableCell className="text-right text-xs font-mono">
                           {lifetimeCost ? `$${lifetimeCost.toFixed(2)}` : "—"}
                         </TableCell>
+                        <TableCell className="text-right text-xs font-mono">
+                          {s.mtdCacheRead ? formatNumber(s.mtdCacheRead) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right text-xs font-mono">
+                          {s.mtdCacheWrite ? formatNumber(s.mtdCacheWrite) : "—"}
+                        </TableCell>
+                        <TableCell />
                         <TableCell />
                         <TableCell />
                       </TableRow>
@@ -476,4 +611,3 @@ export function KeyManager() {
     </div>
   );
 }
-
